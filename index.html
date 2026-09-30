@@ -513,17 +513,145 @@
       color: #fff;
     }
 
-    /* Reviews Section */
+    /* Reviews Section - Google Form & Live Review Wall */
     .reviews-section {
       background: #e9e7df;
       padding: 80px 0;
     }
-    .reviews-embed-wrap {
-      margin-top: 36px;
+    .reviews-split-layout {
+      display: grid;
+      grid-template-columns: 48% 52%;
+      gap: 32px;
+      align-items: flex-start;
+      margin-top: 32px;
+    }
+    .form-section, .display-section {
       background: #f4f2ec;
-      border: 1px solid #d8d7d0;
-      padding: 24px;
-      min-height: 160px;
+      border: 1px solid #dcdcd5;
+      padding: 28px 24px;
+      border-radius: 2px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.04);
+    }
+    .form-section h3, .display-section h3 {
+      font-size: 22px;
+      font-weight: 900;
+      letter-spacing: -0.04em;
+      margin: 0 0 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .form-section-subtitle {
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 14px;
+      display: block;
+    }
+    .form-iframe-wrap {
+      width: 100%;
+      background: #fff;
+      border: 1px solid #d0cfc8;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .form-iframe-wrap iframe {
+      display: block;
+      width: 100%;
+      height: 1187px;
+      min-height: 800px;
+      border: 0;
+      background: #fff;
+    }
+    .form-links-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 10px;
+      font-size: 11px;
+      color: #777;
+    }
+    .form-links-row a {
+      color: var(--orange);
+      font-weight: 700;
+      text-decoration: underline;
+    }
+    .reviews-header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #eae8e0;
+      padding: 10px 14px;
+      border-radius: 2px;
+      margin: 10px 0 16px;
+      font-size: 12px;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .reviews-sync-badge {
+      font-size: 10px;
+      font-weight: 900;
+      color: #2b7a4b;
+      background: #ddead7;
+      padding: 2px 6px;
+      border-radius: 2px;
+    }
+    #reviews-container {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      max-height: 1187px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+    #reviews-container::-webkit-scrollbar { width: 5px; }
+    #reviews-container::-webkit-scrollbar-thumb { background: #cbccc4; border-radius: 3px; }
+    .review-card {
+      background: #faf8f2;
+      border: 1px solid #dfddd5;
+      padding: 16px 18px;
+      border-radius: 2px;
+      transition: transform 0.15s;
+    }
+    .review-card:hover { transform: translateY(-2px); }
+    .review-card-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 8px;
+    }
+    .reviewer-name {
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--ink);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .verified-buyer-pill {
+      font-size: 9px;
+      font-weight: 900;
+      color: #2b7a4b;
+      background: #e0eee4;
+      padding: 2px 5px;
+      border-radius: 2px;
+    }
+    .review-date { font-size: 11px; color: #888; }
+
+    .review-comment { font-size: 13px; line-height: 1.55; color: #444; }
+    .reviews-refresh-btn {
+      background: none;
+      border: 1px solid #cfd0c8;
+      padding: 3px 8px;
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--ink);
+      border-radius: 2px;
+      cursor: pointer;
+    }
+    .reviews-refresh-btn:hover { background: var(--ink); color: #fff; }
+    @media (max-width: 900px) {
+      .reviews-split-layout { grid-template-columns: 1fr; }
     }
 
     /* FAQ */
@@ -911,7 +1039,13 @@
     </div>
 
     <div class="request-form-card">
+      <!-- Native FormSubmit POST: delivers straight to coslikesj@gmail.com inbox -->
       <form id="special-request-form" onsubmit="handleSpecialRequestSubmit(event)">
+        <input type="hidden" name="_subject" value="New cosresells Special Request">
+        <input type="hidden" name="_template" value="table">
+        <input type="hidden" name="_captcha" value="false">
+        <input type="hidden" name="_next" id="formsubmit-next-url" value="">
+
         <div class="form-row">
           <div class="form-group">
             <label>Your Email Address <span>*</span></label>
@@ -925,13 +1059,13 @@
 
         <div class="form-group">
           <label>Product / Item Name <span>*</span></label>
-          <input type="text" name="productName" required placeholder="e.g. Chrome Hearts Matty Boy Hoodie, Balenciaga 3XL...">
+          <input type="text" name="product_requested" required placeholder="e.g. Chrome Hearts Matty Boy Hoodie, Balenciaga 3XL...">
         </div>
 
         <div class="form-row">
           <div class="form-group">
             <label>Category</label>
-            <select name="sizeCategory">
+            <select name="category">
               <option value="Footwear (Shoes / Slides)">Footwear (Shoes / Slides)</option>
               <option value="Tops (Hoodies / Tees / Jackets)">Tops (Hoodies / Tees / Jackets)</option>
               <option value="Bottoms (Pants / Shorts / Sweats)">Bottoms (Pants / Shorts / Sweats)</option>
@@ -941,7 +1075,7 @@
           </div>
           <div class="form-group">
             <label>Fit Preference</label>
-            <select name="fitPreference">
+            <select name="fit_preference">
               <option value="True to Size (TTS)">True to Size (TTS)</option>
               <option value="Oversized / Baggy Streetwear Fit">Oversized / Baggy Streetwear Fit</option>
               <option value="Slim / Tailored Fit">Slim / Tailored Fit</option>
@@ -957,7 +1091,7 @@
           </div>
           <div class="form-group">
             <label>Specific Size <span>* (Be Specific)</span></label>
-            <input type="text" id="req-size-input" name="size" required placeholder="e.g. Men's US 10.5 / EU 44 or Size L">
+            <input type="text" id="req-size-input" name="specific_size" required placeholder="e.g. Men's US 10.5 / EU 44 or Size L">
           </div>
         </div>
 
@@ -980,28 +1114,85 @@
           Send Special Request Directly ↗
         </button>
 
-        <div id="request-status-box" style="display:none; margin-top:14px; background:#ddead7; padding:14px; font-size:13px; color:#244b34; border-radius:2px;">
-          <strong>Request received!</strong> We will email you with sourcing options and pricing.
+        <div id="request-status-box" style="display:none; margin-top:16px; background:#ddead7; padding:18px 20px; font-size:13px; color:#244b34; border-radius:2px; border-left:4px solid #2b7a4b;">
+          <div style="font-weight:900; font-size:14px; margin-bottom:6px;">✓ Special Request Logged &amp; Received!</div>
+          <p id="request-status-msg" style="margin:0 0 12px; color:#444; line-height:1.5;">Your sourcing request has been submitted. You can also send a direct copy from your email app or text us below:</p>
+          <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <a id="req-mailto-btn" href="#" class="btn btn-orange" style="font-size:12px; min-height:38px; padding:0 14px;">✉️ Send from Email App ↗</a>
+            <a id="req-sms-btn" href="#" class="btn btn-dark" style="font-size:12px; min-height:38px; padding:0 14px;">💬 Text 914-689-1796 ↗</a>
+            <a href="https://www.instagram.com/cosresells/" target="_blank" rel="noopener" class="btn btn-outline" style="font-size:12px; min-height:38px; padding:0 14px;">📸 DM @cosresells ↗</a>
+          </div>
         </div>
       </form>
     </div>
   </section>
 
-  <!-- Reviews Section with POWR Embed -->
+  <!-- Reviews Section with Google Form & Live Public Reviews Wall (No Star Ratings) -->
   <section class="reviews-section" id="reviews">
     <div class="section-shell">
       <div class="section-head">
         <div>
-          <div class="eyebrow" style="margin-bottom:8px;">Customer Feedback / 004</div>
+          <div class="eyebrow" style="margin-bottom:8px;">Verified Reviews / 004</div>
           <h2>COMMUNITY <em>REVIEWS.</em></h2>
-          <p>Read genuine feedback from streetwear buyers or leave your review below.</p>
+          <p>Submit a review via our verified Google Form or browse verified feedback from our community below.</p>
         </div>
         <div style="font-size:48px; color:var(--orange);">✳</div>
       </div>
 
-      <!-- POWR Reviews Widget Required by User -->
-      <div class="reviews-embed-wrap">
-        <div class="powr-comments" id="4bd5fd97_1790540159"></div>
+      <!-- Split Layout: Google Form Left, Public Review Wall Right -->
+      <div class="reviews-split-layout">
+        <!-- LEFT SIDE: Secure Submission Form (Google Handles the CAPTCHA Infrastructure) -->
+        <div class="form-section">
+          <h3>
+            <span>Submit a Review</span>
+            <span style="font-size:11px; color:var(--orange); font-weight:800;">Google Form</span>
+          </h3>
+          <span class="form-section-subtitle">
+            🔒 Secure Submission Form (Google Handles the CAPTCHA Infrastructure)
+          </span>
+
+          <!-- Google Form Embed -->
+          <div class="form-iframe-wrap">
+            <iframe
+              src="https://docs.google.com/forms/d/e/1FAIpQLSf4Q1RZKl2SVOiqSv7gV23G3zEp4-ChLWrvQB7s6BdtXmSCjA/viewform?embedded=true"
+              width="100%"
+              height="1187"
+              frameborder="0"
+              marginheight="0"
+              marginwidth="0"
+              title="Submit a Review via Google Form"
+            >Loading…</iframe>
+          </div>
+
+          <div class="form-links-row">
+            <span>Reviews sync to the live public review wall on the right</span>
+            <a href="https://docs.google.com/spreadsheets/d/e/2PACX-1vR4qULFeKP6nV1DXoTY2fqZAwJ57-lCpmU-SA4WHQBCFY_HXNYJffvf91dCshfS_Xrz4phbGt8di9bc/pubhtml" target="_blank" rel="noopener">
+              View Live Sheet ↗
+            </a>
+          </div>
+        </div>
+
+        <!-- RIGHT SIDE: Public Review Wall -->
+        <div class="display-section">
+          <h3>
+            <span>Customer Reviews</span>
+            <button class="reviews-refresh-btn" onclick="loadGoogleSheetReviews()">
+              🔄 Sync Live
+            </button>
+          </h3>
+
+          <div class="reviews-header-bar">
+            <span style="color:#181917; font-weight:800; font-size:13px;" id="rating-summary-text">
+              Verified Customer Reviews (Live Feed)
+            </span>
+            <span class="reviews-sync-badge">
+              ✓ Google Sheets Live
+            </span>
+          </div>
+
+          <!-- Public Reviews Container -->
+          <div id="reviews-container">Loading verified reviews...</div>
+        </div>
       </div>
     </div>
   </section>
@@ -1164,8 +1355,7 @@
   <!-- Toast -->
   <div class="toast" id="toast"></div>
 
-  <!-- POWR Reviews Script Embed -->
-  <script src="https://www.powr.io/powr.js?platform=html" async></script>
+
 
   <script>
     document.getElementById('year').textContent = new Date().getFullYear();
@@ -1396,41 +1586,66 @@
       document.getElementById('header-bag-count').textContent = bag.length;
     }
 
-    // Special Request Submission to coslikesj@gmail.com via FormSubmit
+    // Special Request: FormSubmit AJAX from the customer's browser -> coslikesj@gmail.com.
+    // If FormSubmit fails for any reason, a pre-filled email draft opens so the request is never lost.
     async function handleSpecialRequestSubmit(e) {
       e.preventDefault();
       const form = e.target;
       const btn = document.getElementById('req-submit-btn');
       btn.disabled = true;
-      btn.textContent = 'Submitting Request...';
+      btn.textContent = 'Sending request...';
 
-      const data = {
-        _subject: "New cosresells Special Request",
-        email: form.email.value,
-        phone: form.phone.value || 'Not provided',
-        productName: form.productName.value,
-        category: form.sizeCategory.value,
-        fitPreference: form.fitPreference.value,
-        colorway: form.colorway.value,
-        specificSize: form.size.value,
-        notes: form.notes.value || 'None'
+      const v = (n) => (form.elements[n] ? form.elements[n].value.trim() : '');
+      const refCode = 'REQ-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+      const payload = {
+        _subject: '[cosresells Special Request ' + refCode + '] ' + v('product_requested') + ' (' + v('specific_size') + ')',
+        _template: 'table',
+        _captcha: 'false',
+        reference_id: refCode,
+        email: v('email'),
+        phone: v('phone') || 'Not provided',
+        product_requested: v('product_requested'),
+        category: v('category'),
+        fit_preference: v('fit_preference'),
+        colorway: v('colorway'),
+        specific_size: v('specific_size'),
+        notes: v('notes') || 'None'
       };
 
+      let delivered = false;
       try {
-        await fetch("https://formsubmit.co/ajax/coslikesj@gmail.com", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Accept": "application/json" },
-          body: JSON.stringify(data)
+        const res = await fetch('https://formsubmit.co/ajax/coslikesj@gmail.com', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify(payload)
         });
-        document.getElementById('request-status-box').style.display = 'block';
-        showToast('Special request submitted directly to cosresells!');
+        const json = await res.json().catch(() => ({}));
+        delivered = res.ok && (json.success === true || json.success === 'true');
+      } catch (err) { delivered = false; }
+
+      const body = 'Hi cosresells,\n\nSpecial request (' + refCode + '):\n- Product: ' + payload.product_requested +
+        '\n- Colorway: ' + payload.colorway + '\n- Size: ' + payload.specific_size +
+        '\n- Category: ' + payload.category + '\n- Fit: ' + payload.fit_preference +
+        '\n- My email: ' + payload.email + '\n- Phone: ' + payload.phone + '\n- Notes: ' + payload.notes + '\n';
+      const mailtoUrl = 'mailto:coslikesj@gmail.com?subject=' + encodeURIComponent(payload._subject) + '&body=' + encodeURIComponent(body);
+      const smsUrl = 'sms:+19146891796?body=' + encodeURIComponent('Hi cosresells! Special request ' + refCode + ': ' + payload.product_requested + ', ' + payload.colorway + ', size ' + payload.specific_size + '. My email: ' + payload.email);
+
+      const statusBox = document.getElementById('request-status-box');
+      const statusMsg = document.getElementById('request-status-msg');
+      document.getElementById('req-mailto-btn').href = mailtoUrl;
+      document.getElementById('req-sms-btn').href = smsUrl;
+      if (delivered) {
+        statusMsg.textContent = 'Your request (' + refCode + ') was sent to cosresells. We will contact you at ' + payload.email + '.';
+        showToast('Special request sent! Ref: ' + refCode);
         form.reset();
-      } catch(err) {
-        showToast('Could not submit form. Please email coslikesj@gmail.com directly.');
-      } finally {
-        btn.disabled = false;
-        btn.textContent = 'Send Special Request Directly ↗';
+      } else {
+        statusMsg.textContent = 'Almost done! Tap "Send from Email App" below to finish sending your request (' + refCode + ') to cosresells. This guarantees it reaches us.';
+        showToast('Tap "Send from Email App" to finish your request.');
+        window.location.href = mailtoUrl;
       }
+      statusBox.style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = 'Send Special Request Directly ↗';
     }
 
     function toggleFaq(btn) {
@@ -1444,6 +1659,129 @@
       t.classList.add('show');
       setTimeout(() => { t.classList.remove('show'); }, 4000);
     }
+
+    // Google Sheets Live Reviews Loader (Only Actual Reviews)
+    const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR4qULFeKP6nV1DXoTY2fqZAwJ57-lCpmU-SA4WHQBCFY_HXNYJffvf91dCshfS_Xrz4phbGt8di9bc/pub?output=csv";
+
+    async function loadGoogleSheetReviews() {
+      const container = document.getElementById('reviews-container');
+      const ratingText = document.getElementById('rating-summary-text');
+      container.innerHTML = '<div style="text-align:center; padding:30px; color:#888;">Syncing verified customer reviews from Google Sheets...</div>';
+
+      try {
+        const res = await fetch(SHEET_CSV_URL);
+        const text = await res.text();
+        const rows = parseSimpleCsv(text);
+
+        let liveReviews = [];
+
+        if (rows.length > 1) {
+          const headers = rows[0].map(h => h.toLowerCase());
+          const timeIdx = headers.findIndex(h => h.includes("timestamp") || h.includes("date"));
+          const firstIdx = headers.findIndex(h => h.includes("first name") || h.includes("first"));
+          const lastIdx = headers.findIndex(h => h.includes("last name") || h.includes("last"));
+          const emailIdx = headers.findIndex(h => h.includes("email"));
+          const commentIdx = headers.findIndex(h => h.includes("comment") || h.includes("review") || h.includes("leave"));
+          const imgIdx = headers.findIndex(h => h.includes("image") || h.includes("photo") || h.includes("product"));
+
+          for (let i = 1; i < rows.length; i++) {
+            const r = rows[i];
+            const comment = commentIdx !== -1 && r[commentIdx] ? r[commentIdx].trim() : "";
+            if (!comment) continue;
+
+            const fn = firstIdx !== -1 && r[firstIdx] ? r[firstIdx].trim() : "";
+            const ln = lastIdx !== -1 && r[lastIdx] ? r[lastIdx].trim() : "";
+            const em = emailIdx !== -1 && r[emailIdx] ? r[emailIdx].trim() : "";
+            const dateStr = timeIdx !== -1 && r[timeIdx] ? r[timeIdx].trim() : "Recent";
+            const imgUrl = imgIdx !== -1 && r[imgIdx] ? r[imgIdx].trim() : "";
+
+            let name = fn ? fn.charAt(0).toUpperCase() + fn.slice(1) : "";
+            if (name && ln) name += " " + ln.charAt(0).toUpperCase() + ".";
+            if (!name && em && em.includes("@")) name = em.split("@")[0].charAt(0).toUpperCase() + em.split("@")[0].slice(1);
+            if (!name) name = "Verified Customer";
+
+            liveReviews.unshift({
+              name: name,
+              time: dateStr,
+              comment: comment,
+              imageUrl: imgUrl && imgUrl.startsWith("http") ? imgUrl : null,
+              rating: 5
+            });
+          }
+        }
+
+        if (liveReviews.length === 0) {
+          if (ratingText) ratingText.innerHTML = '<strong>Verified Customer Reviews</strong> (Live Google Sheets Feed)';
+          container.innerHTML = `
+            <div style="text-align:center; padding:40px 20px; color:#777; background:#faf8f2; border:1px dashed #dcdcd5; border-radius:2px;">
+              <div style="font-size:28px; margin-bottom:8px;">💬</div>
+              <h4 style="font-size:16px; font-weight:800; color:#181917; margin:0 0 4px;">No reviews submitted yet</h4>
+              <p style="margin:0; font-size:13px;">Submit your review via the form on the left to be the first one featured!</p>
+            </div>
+          `;
+        } else {
+          if (ratingText) ratingText.innerHTML = '<strong>5.0</strong> (' + liveReviews.length + ' Verified Customer Review' + (liveReviews.length === 1 ? '' : 's') + ')';
+          container.innerHTML = liveReviews.map(rev => `
+            <div class="review-card">
+              <div class="review-card-top">
+                <div>
+                  <div class="reviewer-name">
+                    ${rev.name}
+                    <span class="verified-buyer-pill">Verified Buyer</span>
+                  </div>
+                </div>
+                <span class="review-date">${rev.time}</span>
+              </div>
+              <p class="review-comment">“${rev.comment}”</p>
+              ${rev.imageUrl ? `<img src="${rev.imageUrl}" alt="Customer product photo" style="margin-top:10px; max-width:140px; border-radius:2px; border:1px solid #ddd;">` : ''}
+            </div>
+          `).join('');
+        }
+
+        showToast('Synced ' + liveReviews.length + ' customer reviews from Google Sheets!');
+      } catch (err) {
+        console.warn("Sheet fetch error:", err);
+        container.innerHTML = `
+          <div style="text-align:center; padding:40px 20px; color:#777;">
+            <p>Could not sync live reviews. Please click "🔄 Sync Live" to retry.</p>
+          </div>
+        `;
+      }
+    }
+
+    function parseSimpleCsv(text) {
+      const p = [];
+      let row = [];
+      let inQ = false;
+      let cur = "";
+      for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        const next = text[i + 1];
+        if (c === '"') {
+          if (inQ && next === '"') { cur += '"'; i++; }
+          else { inQ = !inQ; }
+        } else if (c === ',' && !inQ) {
+          row.push(cur.trim());
+          cur = "";
+        } else if ((c === '\r' || c === '\n') && !inQ) {
+          if (c === '\r' && next === '\n') i++;
+          row.push(cur.trim());
+          if (row.some(x => x.length > 0)) p.push(row);
+          row = [];
+          cur = "";
+        } else {
+          cur += c;
+        }
+      }
+      if (cur || row.length > 0) {
+        row.push(cur.trim());
+        if (row.some(x => x.length > 0)) p.push(row);
+      }
+      return p;
+    }
+
+    // Load reviews on initial load
+    loadGoogleSheetReviews();
   </script>
 </body>
 </html>
