@@ -1,0 +1,1913 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>cosresells — Curated Streetwear Sourcing</title>
+  <meta name="description" content="Curated luxury and streetwear reselling. Choose your colorway and size, upload a reference photo, and check out securely with Stripe.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,600;1,600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --cream: #f4f2ed;
+      --paper: #faf9f5;
+      --ink: #181917;
+      --muted: #777872;
+      --orange: #ec5b36;
+      --orange-hover: #d84a27;
+      --line: #dcdcd5;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--cream);
+      color: var(--ink);
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+    button, input, textarea, select { font: inherit; }
+    button { cursor: pointer; border: 0; background: none; }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    a { color: inherit; text-decoration: none; }
+    img { display: block; max-width: 100%; }
+
+    .section-shell {
+      max-width: 1400px;
+      padding-left: clamp(20px, 4vw, 64px);
+      padding-right: clamp(20px, 4vw, 64px);
+      margin: 0 auto;
+    }
+
+    /* Top Announcement */
+    .announcement {
+      background: var(--ink);
+      color: #f7f4ea;
+      padding: 8px 16px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.16em;
+      text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+    }
+    .announcement-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--orange);
+      flex-shrink: 0;
+    }
+
+    /* Header */
+    .site-header {
+      height: 76px;
+      background: var(--cream);
+      border-bottom: 1px solid #e2e1da;
+      position: sticky;
+      top: 0;
+      z-index: 40;
+    }
+    .header-inner {
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .wordmark {
+      font-size: 30px;
+      font-weight: 900;
+      letter-spacing: -0.07em;
+      line-height: 1;
+    }
+    .wordmark-star {
+      color: var(--orange);
+      font-size: 18px;
+      vertical-align: top;
+      margin-left: 2px;
+    }
+    .desktop-nav {
+      display: flex;
+      gap: 30px;
+      margin-left: auto;
+      margin-right: 32px;
+    }
+    .desktop-nav a {
+      font-size: 13px;
+      font-weight: 700;
+      transition: color 0.2s;
+    }
+    .desktop-nav a:hover { color: var(--orange); }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .bag-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 800;
+      padding: 8px 14px;
+      background: #eae8e1;
+      border-radius: 3px;
+    }
+    .bag-count {
+      background: var(--ink);
+      color: #fff;
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 12px;
+    }
+
+    /* Hero */
+    .hero {
+      display: grid;
+      grid-template-columns: 52% 48%;
+      min-height: 600px;
+      border-bottom: 1px solid var(--line);
+    }
+    .hero-copy {
+      padding: clamp(40px, 6vw, 76px) clamp(20px, 4vw, 56px) 40px clamp(20px, 4vw, 64px);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: flex-start;
+    }
+    .eyebrow {
+      font-size: 11px;
+      letter-spacing: 0.2em;
+      font-weight: 900;
+      color: var(--orange);
+      text-transform: uppercase;
+      margin-bottom: 18px;
+    }
+    .hero h1 {
+      font-size: clamp(54px, 7vw, 98px);
+      line-height: 0.94;
+      letter-spacing: -0.08em;
+      font-weight: 900;
+      margin-bottom: 22px;
+    }
+    .hero h1 em {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-weight: 600;
+      font-style: italic;
+      color: var(--orange);
+    }
+    .hero p {
+      font-size: 16px;
+      color: #5c5d57;
+      max-width: 480px;
+      line-height: 1.65;
+      margin-bottom: 30px;
+    }
+    .hero-actions {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+    .btn {
+      min-height: 50px;
+      padding: 0 24px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+      border-radius: 2px;
+      transition: transform 0.15s, background 0.15s;
+    }
+    .btn:hover { transform: translateY(-2px); }
+    .btn-dark { background: var(--ink); color: #fff; }
+    .btn-dark:hover { background: #333; }
+    .btn-orange { background: var(--orange); color: #fff; }
+    .btn-orange:hover { background: var(--orange-hover); }
+    .btn-outline { border: 1px solid var(--ink); color: var(--ink); }
+    .btn-outline:hover { background: #eae8e1; }
+
+    .hero-visual {
+      background: #c8c9c2;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero-visual img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center 30%;
+    }
+    .hero-badge {
+      position: absolute;
+      right: 32px;
+      bottom: 32px;
+      width: 110px;
+      height: 110px;
+      border-radius: 50%;
+      background: var(--orange);
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      transform: rotate(8deg);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+    }
+    .hero-badge span { font-size: 9px; letter-spacing: 0.1em; }
+    .hero-badge strong { font-size: 32px; line-height: 1; }
+
+    /* Ticker */
+    .ticker {
+      background: var(--orange);
+      color: #fff;
+      overflow: hidden;
+      white-space: nowrap;
+      padding: 12px 0;
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: 0.14em;
+    }
+    .ticker-track {
+      display: inline-block;
+      animation: ticker 35s linear infinite;
+    }
+    @keyframes ticker {
+      0% { transform: translateX(0); }
+      100% { transform: translateX(-50%); }
+    }
+
+    /* Catalog Section */
+    .catalog-section {
+      padding: 80px 0;
+    }
+    .section-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 24px;
+      margin-bottom: 32px;
+      flex-wrap: wrap;
+    }
+    .section-head h2 {
+      font-size: clamp(38px, 5vw, 68px);
+      letter-spacing: -0.07em;
+      font-weight: 900;
+      line-height: 1.05;
+    }
+    .section-head h2 em {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-style: italic;
+      color: var(--orange);
+      font-weight: 600;
+    }
+    .section-head p {
+      font-size: 15px;
+      color: #6a6b65;
+      margin-top: 10px;
+      max-width: 580px;
+    }
+
+    .catalog-controls {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      padding: 14px 0;
+      margin-bottom: 36px;
+      flex-wrap: wrap;
+    }
+    .category-filters {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+    }
+    .cat-btn {
+      padding: 8px 16px;
+      font-size: 13px;
+      font-weight: 800;
+      border-radius: 2px;
+      color: #666;
+      transition: 0.2s;
+    }
+    .cat-btn.active { background: var(--ink); color: #fff; }
+    .cat-btn:hover:not(.active) { color: var(--ink); background: #eae8e1; }
+
+    .search-box {
+      display: flex;
+      align-items: center;
+      background: #fff;
+      border: 1px solid var(--line);
+      padding: 8px 14px;
+      gap: 8px;
+      min-width: 240px;
+    }
+    .search-box input {
+      border: 0;
+      outline: 0;
+      font-size: 13px;
+      width: 100%;
+    }
+
+    /* Product Grid */
+    .product-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 28px 20px;
+    }
+    .product-card {
+      background: #eae8e1;
+      padding: 12px;
+      border-radius: 2px;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .product-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 24px rgba(0,0,0,0.08);
+    }
+    .card-img-wrap {
+      width: 100%;
+      aspect-ratio: 1;
+      background: #dedbd2;
+      overflow: hidden;
+      position: relative;
+    }
+    .card-img-wrap img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: transform 0.5s;
+    }
+    .product-card:hover .card-img-wrap img { transform: scale(1.06); }
+    .card-tag {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: var(--ink);
+      color: #fff;
+      font-size: 9px;
+      font-weight: 900;
+      padding: 4px 8px;
+      letter-spacing: 0.1em;
+    }
+    .card-info {
+      padding: 12px 4px 4px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .card-category {
+      font-size: 10px;
+      font-weight: 800;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+    .card-title {
+      font-size: 16px;
+      font-weight: 800;
+      margin: 4px 0 6px;
+      letter-spacing: -0.03em;
+    }
+    .card-stripe-pill {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 800;
+      color: #244b34;
+      background: #ddead7;
+      padding: 2px 6px;
+      border-radius: 2px;
+    }
+    .card-arrow {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: 1px solid #bfc0b9;
+      background: #faf8f2;
+      display: grid;
+      place-items: center;
+      font-weight: 900;
+      margin-top: 4px;
+      flex-shrink: 0;
+      transition: 0.2s;
+    }
+    .product-card:hover .card-arrow {
+      background: var(--ink);
+      color: #fff;
+      border-color: var(--ink);
+    }
+
+    /* Process / Sizing Guidance */
+    .process-section {
+      background: var(--ink);
+      color: #fff;
+      padding: 80px 0;
+    }
+    .process-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 32px;
+      margin-top: 48px;
+    }
+    .process-step {
+      border-top: 1px solid #444;
+      padding-top: 20px;
+    }
+    .step-num {
+      color: var(--orange);
+      font-size: 14px;
+      font-weight: 900;
+      margin-bottom: 24px;
+    }
+    .process-step h3 {
+      font-size: 22px;
+      letter-spacing: -0.04em;
+      margin-bottom: 10px;
+    }
+    .process-step p {
+      font-size: 14px;
+      color: #aaa;
+      line-height: 1.6;
+    }
+
+    /* Special Request Section */
+    .request-section {
+      padding: 96px 0;
+      display: grid;
+      grid-template-columns: 44% 56%;
+      gap: 48px;
+    }
+    .sizing-guidance-box {
+      background: #eae8e0;
+      border-left: 3px solid var(--orange);
+      padding: 18px 20px;
+      margin: 28px 0;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .sizing-guidance-box strong { color: #bd361e; }
+    .sizing-guidance-box ul { padding-left: 20px; margin-top: 8px; }
+
+    .request-form-card {
+      background: #eae9e2;
+      padding: clamp(24px, 4vw, 40px);
+      border-radius: 2px;
+    }
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 18px;
+    }
+    .form-group label {
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .form-group label span { color: var(--orange); }
+    .form-group input, .form-group textarea, .form-group select {
+      background: #f7f6f1;
+      border: 1px solid #cfd0c8;
+      padding: 12px 14px;
+      font-size: 13px;
+      color: var(--ink);
+      outline: 0;
+      border-radius: 2px;
+      transition: border 0.2s;
+    }
+    .form-group input:focus, .form-group textarea:focus, .form-group select:focus {
+      border-color: var(--orange);
+      background: #fff;
+    }
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .presets-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 16px;
+    }
+    .preset-chip {
+      font-size: 11px;
+      font-weight: 700;
+      background: #dedbd3;
+      padding: 4px 10px;
+      border-radius: 2px;
+      border: 1px solid #cbccc4;
+      transition: 0.15s;
+    }
+    .preset-chip:hover {
+      background: var(--ink);
+      color: #fff;
+    }
+
+    /* Reviews Section - Google Form & Live Review Wall */
+    .reviews-section {
+      background: #e9e7df;
+      padding: 80px 0;
+    }
+    .reviews-split-layout {
+      display: grid;
+      grid-template-columns: 48% 52%;
+      gap: 32px;
+      align-items: flex-start;
+      margin-top: 32px;
+    }
+    .form-section, .display-section {
+      background: #f4f2ec;
+      border: 1px solid #dcdcd5;
+      padding: 28px 24px;
+      border-radius: 2px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.04);
+    }
+    .form-section h3, .display-section h3 {
+      font-size: 22px;
+      font-weight: 900;
+      letter-spacing: -0.04em;
+      margin: 0 0 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .form-section-subtitle {
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 14px;
+      display: block;
+    }
+    .form-iframe-wrap {
+      width: 100%;
+      background: #fff;
+      border: 1px solid #d0cfc8;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .form-iframe-wrap iframe {
+      display: block;
+      width: 100%;
+      height: 1187px;
+      min-height: 800px;
+      border: 0;
+      background: #fff;
+    }
+    .form-links-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 10px;
+      font-size: 11px;
+      color: #777;
+    }
+    .form-links-row a {
+      color: var(--orange);
+      font-weight: 700;
+      text-decoration: underline;
+    }
+    .reviews-header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #eae8e0;
+      padding: 10px 14px;
+      border-radius: 2px;
+      margin: 10px 0 16px;
+      font-size: 12px;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .reviews-sync-badge {
+      font-size: 10px;
+      font-weight: 900;
+      color: #2b7a4b;
+      background: #ddead7;
+      padding: 2px 6px;
+      border-radius: 2px;
+    }
+    #reviews-container {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      max-height: 1187px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+    #reviews-container::-webkit-scrollbar { width: 5px; }
+    #reviews-container::-webkit-scrollbar-thumb { background: #cbccc4; border-radius: 3px; }
+    .review-card {
+      background: #faf8f2;
+      border: 1px solid #dfddd5;
+      padding: 16px 18px;
+      border-radius: 2px;
+      transition: transform 0.15s;
+    }
+    .review-card:hover { transform: translateY(-2px); }
+    .review-card-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 8px;
+    }
+    .reviewer-name {
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--ink);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .verified-buyer-pill {
+      font-size: 9px;
+      font-weight: 900;
+      color: #2b7a4b;
+      background: #e0eee4;
+      padding: 2px 5px;
+      border-radius: 2px;
+    }
+    .review-date { font-size: 11px; color: #888; }
+
+    .review-comment { font-size: 13px; line-height: 1.55; color: #444; }
+    .reviews-refresh-btn {
+      background: none;
+      border: 1px solid #cfd0c8;
+      padding: 3px 8px;
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--ink);
+      border-radius: 2px;
+      cursor: pointer;
+    }
+    .reviews-refresh-btn:hover { background: var(--ink); color: #fff; }
+    @media (max-width: 900px) {
+      .reviews-split-layout { grid-template-columns: 1fr; }
+    }
+
+    /* FAQ */
+    .faq-section {
+      padding: 88px 0;
+      display: grid;
+      grid-template-columns: 38% 62%;
+      gap: 40px;
+    }
+    .faq-item {
+      border-bottom: 1px solid var(--line);
+      padding: 20px 0;
+    }
+    .faq-q {
+      font-size: 17px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      display: flex;
+      justify-content: space-between;
+      width: 100%;
+      text-align: left;
+    }
+    .faq-a {
+      font-size: 14px;
+      color: #666;
+      line-height: 1.65;
+      margin-top: 10px;
+      display: none;
+    }
+    .faq-item.open .faq-a { display: block; }
+    .faq-item.open .faq-toggle { transform: rotate(45deg); }
+
+    /* Footer */
+    .footer {
+      background: #141513;
+      color: #eeeae1;
+      padding: 64px 0 32px;
+    }
+    .footer-main {
+      display: flex;
+      justify-content: space-between;
+      gap: 40px;
+      flex-wrap: wrap;
+      margin-bottom: 48px;
+    }
+    .footer-brand p {
+      color: #999;
+      font-size: 14px;
+      max-width: 340px;
+      margin-top: 14px;
+    }
+    .footer-policy-alert {
+      color: var(--orange);
+      font-size: 12px;
+      font-weight: 800;
+      margin-top: 14px;
+    }
+    .footer-links {
+      display: flex;
+      gap: 60px;
+      flex-wrap: wrap;
+    }
+    .footer-col h4 {
+      font-size: 11px;
+      letter-spacing: 0.16em;
+      color: #888;
+      margin-bottom: 14px;
+    }
+    .footer-col a {
+      display: block;
+      font-size: 13px;
+      color: #ddd;
+      margin-bottom: 10px;
+      transition: color 0.15s;
+    }
+    .footer-col a:hover { color: var(--orange); }
+
+    .footer-bottom {
+      border-top: 1px solid #2e2f2b;
+      padding-top: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      font-size: 11px;
+      color: #777;
+      flex-wrap: wrap;
+    }
+
+    /* Modal / Popups */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 99;
+      display: none;
+      place-items: center;
+      padding: 16px;
+    }
+    .modal-overlay.active { display: grid; }
+    .modal-box {
+      background: var(--cream);
+      max-width: 860px;
+      width: 100%;
+      max-height: 92vh;
+      overflow-y: auto;
+      display: grid;
+      grid-template-columns: 42% 58%;
+      box-shadow: 0 25px 60px rgba(0,0,0,0.4);
+      position: relative;
+    }
+    .modal-close {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      width: 36px;
+      height: 36px;
+      background: #faf8f2;
+      border: 1px solid var(--line);
+      display: grid;
+      place-items: center;
+      font-size: 18px;
+      font-weight: 900;
+      z-index: 10;
+    }
+    .modal-img-wrap {
+      background: #dedbd2;
+      position: relative;
+    }
+    .modal-img-wrap img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .modal-content {
+      padding: clamp(24px, 4vw, 36px);
+    }
+    .modal-content h3 {
+      font-size: 28px;
+      letter-spacing: -0.05em;
+      font-weight: 900;
+      margin: 8px 0 12px;
+    }
+    .upload-btn-area {
+      border: 1px dashed #999;
+      background: #faf8f2;
+      padding: 12px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+      border-radius: 2px;
+    }
+    .upload-preview {
+      width: 44px;
+      height: 44px;
+      object-fit: cover;
+      background: #eee;
+      border-radius: 2px;
+    }
+
+    /* Bag Drawer */
+    .drawer-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      z-index: 90;
+      display: none;
+    }
+    .drawer-overlay.active { display: block; }
+    .bag-drawer {
+      position: fixed;
+      top: 0;
+      right: -100%;
+      bottom: 0;
+      width: min(460px, 100vw);
+      background: var(--cream);
+      z-index: 95;
+      display: flex;
+      flex-direction: column;
+      box-shadow: -10px 0 40px rgba(0,0,0,0.3);
+      transition: right 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .bag-drawer.open { right: 0; }
+    .drawer-head {
+      padding: 24px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .drawer-items {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px 24px;
+    }
+    .bag-item-card {
+      display: flex;
+      gap: 14px;
+      padding: 14px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .bag-item-card img {
+      width: 80px;
+      height: 90px;
+      object-fit: cover;
+      background: #ddd;
+    }
+    .bag-item-info { flex: 1; }
+    .bag-item-info h4 { font-size: 15px; margin-bottom: 4px; }
+    .bag-item-info p { font-size: 12px; color: #666; margin-bottom: 2px; }
+    .drawer-foot {
+      padding: 20px 24px;
+      border-top: 1px solid var(--line);
+      background: #eae8e1;
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--ink);
+      color: #fff;
+      padding: 12px 22px;
+      font-size: 13px;
+      font-weight: 700;
+      z-index: 120;
+      display: none;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    }
+    .toast.show { display: block; }
+
+    @media (max-width: 860px) {
+      .hero { grid-template-columns: 1fr; }
+      .hero-visual { height: 380px; }
+      .request-section, .faq-section { grid-template-columns: 1fr; }
+      .desktop-nav { display: none; }
+      .modal-box { grid-template-columns: 1fr; }
+      .modal-img-wrap { height: 220px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Announcement -->
+  <div class="announcement">
+    <span class="announcement-dot"></span>
+    THE FINDS YOU WANT · YOUR COLORWAY &amp; EXACT SIZE · SECURE STRIPE CHECKOUT
+    <span class="announcement-dot"></span>
+  </div>
+
+  <!-- Header -->
+  <header class="site-header">
+    <div class="section-shell header-inner">
+      <a href="#" class="wordmark">cosresells<span class="wordmark-star">✳</span></a>
+      <nav class="desktop-nav">
+        <a href="#catalog">Shop Catalog</a>
+        <a href="#how-it-works">How It Works</a>
+        <a href="#special-request">Special Requests</a>
+        <a href="#reviews">Reviews</a>
+        <a href="#faq">FAQ &amp; Refunds</a>
+      </nav>
+      <div class="header-actions">
+        <button class="bag-btn" onclick="toggleBag(true)">
+          <span>Bag</span>
+          <span class="bag-count" id="header-bag-count">0</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="hero section-shell">
+    <div class="hero-copy">
+      <div class="eyebrow">Curated Streetwear Sourcing</div>
+      <h1>YOUR NEXT<br>FAVORITE<br><em>FIND.</em></h1>
+      <p>
+        Looking for a specific colorway, size, or grail piece? Browse our lineup, input your exact colorway and specific size, upload a reference photo, and check out securely with Stripe.
+      </p>
+      <div class="hero-actions">
+        <a href="#catalog" class="btn btn-dark">Explore Catalog ↓</a>
+        <a href="#special-request" class="btn btn-orange">Special Sourcing Request ↗</a>
+      </div>
+    </div>
+    <div class="hero-visual">
+      <img src="https://images.pexels.com/photos/26178658/pexels-photo-26178658.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=1200&w=900" alt="Streetwear model in hoodie">
+      <div class="hero-badge">
+        <span>EXACT</span>
+        <strong>FIT</strong>
+        <span>✳</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Ticker -->
+  <div class="ticker">
+    <div class="ticker-track">
+      AUTHENTIC STREETWEAR ✳ BALENCIAGA ✳ ESSENTIALS FOG ✳ CHROME HEARTS ✳ MAISON MARGIELA ✳ GALLERY DEPT ✳ SECURE STRIPE CHECKOUT ✳ MULTI-ITEM CART ✳ CUSTOM COLORWAYS &amp; SIZES ✳ AUTHENTIC STREETWEAR ✳ BALENCIAGA ✳ ESSENTIALS FOG ✳ CHROME HEARTS ✳ MAISON MARGIELA ✳ GALLERY DEPT ✳ SECURE STRIPE CHECKOUT ✳
+    </div>
+  </div>
+
+  <!-- Catalog Section -->
+  <section class="catalog-section section-shell" id="catalog">
+    <div class="section-head">
+      <div>
+        <div class="eyebrow" style="margin-bottom:8px;">The Lineup / 001</div>
+        <h2>THE <em>CATALOG.</em></h2>
+        <p>Click any piece to choose your desired colorway, exact size, and upload a product reference image.</p>
+      </div>
+      <div style="font-size:11px; font-weight:800; color:#888; letter-spacing:0.14em;">16 VERIFIED PIECES</div>
+    </div>
+
+    <!-- Toolbar -->
+    <div class="catalog-controls">
+      <div class="category-filters" id="category-filter-list">
+        <button class="cat-btn active" onclick="filterCategory('All', this)">All</button>
+        <button class="cat-btn" onclick="filterCategory('Footwear', this)">Footwear</button>
+        <button class="cat-btn" onclick="filterCategory('Tops', this)">Tops</button>
+        <button class="cat-btn" onclick="filterCategory('Bottoms', this)">Bottoms</button>
+        <button class="cat-btn" onclick="filterCategory('Accessories', this)">Accessories</button>
+      </div>
+      <div class="search-box">
+        <span>🔍</span>
+        <input type="text" id="catalog-search" placeholder="Search catalog..." oninput="filterSearch(this.value)">
+      </div>
+    </div>
+
+    <!-- Grid -->
+    <div class="product-grid" id="product-grid"></div>
+  </section>
+
+  <!-- How It Works -->
+  <section class="process-section" id="how-it-works">
+    <div class="section-shell">
+      <div class="eyebrow" style="color:#aaa;">Step-By-Step / 002</div>
+      <h2 style="font-size:clamp(36px, 5vw, 64px); letter-spacing:-0.06em; font-weight:900;">
+        HOW COSRESELLS<br><em style="font-family:'Playfair Display',serif; color:var(--orange);">WORKS.</em>
+      </h2>
+      <div class="process-grid">
+        <div class="process-step">
+          <div class="step-num">01 / CHOOSE &amp; CUSTOMIZE</div>
+          <h3>Select Your Piece</h3>
+          <p>Pick any piece from the catalog. Enter your preferred colorway and exact specific size (e.g. EU 43 / US 10 M, Oversized Large).</p>
+        </div>
+        <div class="process-step">
+          <div class="step-num">02 / UPLOAD REFERENCE PHOTO</div>
+          <h3>Attach Product Image</h3>
+          <p>Upload a photo of the exact item or colorway so our sourcing network has 100% precision on what you receive.</p>
+        </div>
+        <div class="process-step">
+          <div class="step-num">03 / STRIPE CHECKOUT</div>
+          <h3>Secure Stripe Payment</h3>
+          <p>Pay immediately with 1-click Stripe checkout or add multiple items to your bag. Sourcing and delivery follow promptly!</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Special Request Section -->
+  <section class="request-section section-shell" id="special-request">
+    <div class="request-intro">
+      <div class="eyebrow">Custom Sourcing / 003</div>
+      <h2 style="font-size:clamp(36px, 4.5vw, 60px); letter-spacing:-0.06em; font-weight:900; line-height:1.05;">
+        CAN&apos;T FIND IT?<br><em style="font-family:'Playfair Display',serif; color:var(--orange); font-style:italic;">SPECIAL REQUEST.</em>
+      </h2>
+      <p style="color:#666; margin-top:14px; font-size:15px; line-height:1.65;">
+        Looking for a piece not listed? Whether it's rare denim, archived hoodies, or sold-out sneakers, tell us what you're looking for.
+      </p>
+
+      <!-- Sizing Guidance Callout -->
+      <div class="sizing-guidance-box">
+        <strong>⚠️ PLEASE BE AS SPECIFIC AS POSSIBLE ON SIZING:</strong>
+        <ul>
+          <li><strong>👟 Shoes &amp; Slides:</strong> Include US vs EU &amp; Men's vs Women's (e.g. <em>Men's US 10.5 / EU 44</em>).</li>
+          <li><strong>👕 Tops &amp; Hoodies:</strong> Specify letter size and fit (e.g. <em>Large - Oversized Baggy Fit</em> or <em>TTS</em>).</li>
+          <li><strong>👖 Pants &amp; Sweats:</strong> Include waist size &amp; inseam (e.g. <em>Waist 32 / Length 30</em>).</li>
+        </ul>
+      </div>
+
+      <p style="font-size:13px; color:#555; font-weight:700;">
+        Direct Contact: <a href="mailto:coslikesj@gmail.com" style="text-decoration:underline;">coslikesj@gmail.com</a> · Call/Text: <strong>914-689-1796</strong>
+      </p>
+    </div>
+
+    <div class="request-form-card">
+      <!-- Formspree AJAX form: delivers straight to coslikesj@gmail.com inbox -->
+      <form id="special-request-form">
+        <input type="hidden" name="_subject" value="New cosresells Special Request">
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Your Email Address <span>*</span></label>
+            <input type="email" name="email" required placeholder="you@example.com">
+          </div>
+          <div class="form-group">
+            <label>Phone Number <small>(Optional)</small></label>
+            <input type="tel" name="phone" placeholder="914-689-1796">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Product / Item Name <span>*</span></label>
+          <input type="text" name="product_requested" required placeholder="e.g. Chrome Hearts Matty Boy Hoodie, Balenciaga 3XL...">
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Category</label>
+            <select name="category">
+              <option value="Footwear (Shoes / Slides)">Footwear (Shoes / Slides)</option>
+              <option value="Tops (Hoodies / Tees / Jackets)">Tops (Hoodies / Tees / Jackets)</option>
+              <option value="Bottoms (Pants / Shorts / Sweats)">Bottoms (Pants / Shorts / Sweats)</option>
+              <option value="Accessories (Socks / Hats / Bags)">Accessories (Socks / Hats / Bags)</option>
+              <option value="Jewelry / Other">Jewelry / Other</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Fit Preference</label>
+            <select name="fit_preference">
+              <option value="True to Size (TTS)">True to Size (TTS)</option>
+              <option value="Oversized / Baggy Streetwear Fit">Oversized / Baggy Streetwear Fit</option>
+              <option value="Slim / Tailored Fit">Slim / Tailored Fit</option>
+              <option value="Boxy Vintage Fit">Boxy Vintage Fit</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Desired Colorway <span>*</span></label>
+            <input type="text" name="colorway" required placeholder="e.g. Washed Vintage Black, Grey">
+          </div>
+          <div class="form-group">
+            <label>Specific Size <span>* (Be Specific)</span></label>
+            <input type="text" id="req-size-input" name="specific_size" required placeholder="e.g. Men's US 10.5 / EU 44 or Size L">
+          </div>
+        </div>
+
+        <div style="font-size:11px; font-weight:800; color:#777; margin-bottom:6px;">Quick Presets:</div>
+        <div class="presets-row">
+          <button type="button" class="preset-chip" onclick="document.getElementById('req-size-input').value='US 9 M / EU 42'">US 9 M / EU 42</button>
+          <button type="button" class="preset-chip" onclick="document.getElementById('req-size-input').value='US 10 M / EU 43'">US 10 M / EU 43</button>
+          <button type="button" class="preset-chip" onclick="document.getElementById('req-size-input').value='US 10.5 M / EU 44'">US 10.5 M / EU 44</button>
+          <button type="button" class="preset-chip" onclick="document.getElementById('req-size-input').value='Tee: Medium'">Tee: Medium</button>
+          <button type="button" class="preset-chip" onclick="document.getElementById('req-size-input').value='Hoodie: Large (Oversized)'">Hoodie: Large (Oversized)</button>
+          <button type="button" class="preset-chip" onclick="document.getElementById('req-size-input').value='Waist 32'">Waist 32</button>
+        </div>
+
+        <div class="form-group">
+          <label>Additional Notes / Reference Links <small>(Optional)</small></label>
+          <textarea name="notes" rows="3" placeholder="Paste reference links, desired season, or details..."></textarea>
+        </div>
+
+        <button type="submit" class="btn btn-orange" style="width:100%;" id="req-submit-btn">
+          Send Special Request ↗
+        </button>
+
+        <div id="request-status-box" style="display:none; margin-top:16px; background:#ddead7; padding:18px 20px; font-size:13px; color:#244b34; border-radius:2px; border-left:4px solid #2b7a4b;">
+          <div style="font-weight:900; font-size:14px; margin-bottom:6px;">✓ Special Request Sent!</div>
+          <p id="request-status-msg" style="margin:0 0 12px; color:#444; line-height:1.5;">Thanks! Your request has been emailed directly to coslikesj@gmail.com. We&apos;ll reply to the email you provided with sourcing details and pricing.</p>
+          <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <a href="mailto:coslikesj@gmail.com" class="btn btn-orange" style="font-size:12px; min-height:38px; padding:0 14px;">✉️ Follow up by email ↗</a>
+            <a href="https://www.instagram.com/cosresells/" target="_blank" rel="noopener" class="btn btn-outline" style="font-size:12px; min-height:38px; padding:0 14px;">📸 DM @cosresells ↗</a>
+          </div>
+        </div>
+
+        <div id="request-error-box" style="display:none; margin-top:14px; background:#fdecec; color:#8c1d1d; padding:14px 16px; font-size:13px; border-radius:2px; border-left:4px solid #c0392b;">
+          <strong>Could not send your request.</strong> Please email us directly at
+          <a href="mailto:coslikesj@gmail.com" style="color:#8c1d1d; text-decoration:underline; font-weight:800;">coslikesj@gmail.com</a>.
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <!-- Reviews Section with Google Form & Live Public Reviews Wall (No Star Ratings) -->
+  <section class="reviews-section" id="reviews">
+    <div class="section-shell">
+      <div class="section-head">
+        <div>
+          <div class="eyebrow" style="margin-bottom:8px;">Verified Reviews / 004</div>
+          <h2>COMMUNITY <em>REVIEWS.</em></h2>
+          <p>Submit a review via our verified Google Form or browse verified feedback from our community below.</p>
+        </div>
+        <div style="font-size:48px; color:var(--orange);">✳</div>
+      </div>
+
+      <!-- Split Layout: Google Form Left, Public Review Wall Right -->
+      <div class="reviews-split-layout">
+        <!-- LEFT SIDE: Secure Submission Form (Google Handles the CAPTCHA Infrastructure) -->
+        <div class="form-section">
+          <h3>
+            <span>Submit a Review</span>
+            <span style="font-size:11px; color:var(--orange); font-weight:800;">Google Form</span>
+          </h3>
+          <span class="form-section-subtitle">
+            🔒 Secure Submission Form (Google Handles the CAPTCHA Infrastructure)
+          </span>
+
+          <!-- Google Form Embed -->
+          <div class="form-iframe-wrap">
+            <iframe
+              src="https://docs.google.com/forms/d/e/1FAIpQLSf4Q1RZKl2SVOiqSv7gV23G3zEp4-ChLWrvQB7s6BdtXmSCjA/viewform?embedded=true"
+              width="100%"
+              height="1187"
+              frameborder="0"
+              marginheight="0"
+              marginwidth="0"
+              title="Submit a Review via Google Form"
+            >Loading…</iframe>
+          </div>
+
+          <div class="form-links-row">
+            <span>Reviews sync to the live public review wall on the right</span>
+            <a href="https://docs.google.com/spreadsheets/d/e/2PACX-1vR4qULFeKP6nV1DXoTY2fqZAwJ57-lCpmU-SA4WHQBCFY_HXNYJffvf91dCshfS_Xrz4phbGt8di9bc/pubhtml" target="_blank" rel="noopener">
+              View Live Sheet ↗
+            </a>
+          </div>
+        </div>
+
+        <!-- RIGHT SIDE: Public Review Wall -->
+        <div class="display-section">
+          <h3>
+            <span>Customer Reviews</span>
+            <button class="reviews-refresh-btn" onclick="loadGoogleSheetReviews()">
+              🔄 Sync Live
+            </button>
+          </h3>
+
+          <div class="reviews-header-bar">
+            <span style="color:#181917; font-weight:800; font-size:13px;" id="rating-summary-text">
+              Verified Customer Reviews (Live Feed)
+            </span>
+            <span class="reviews-sync-badge">
+              ✓ Google Sheets Live
+            </span>
+          </div>
+
+          <!-- Public Reviews Container -->
+          <div id="reviews-container">Loading verified reviews...</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ Section -->
+  <section class="faq-section section-shell" id="faq">
+    <div>
+      <div class="eyebrow">Store Policies / 005</div>
+      <h2 style="font-size:clamp(36px, 4vw, 56px); font-weight:900; letter-spacing:-0.06em;">
+        FREQUENTLY ASKED<br><em style="font-family:'Playfair Display',serif; color:var(--orange); font-style:italic;">QUESTIONS.</em>
+      </h2>
+    </div>
+    <div class="faq-list">
+      <div class="faq-item open">
+        <button class="faq-q" onclick="toggleFaq(this)">
+          <span>01 / What is your refund policy?</span>
+          <span class="faq-toggle">+</span>
+        </button>
+        <div class="faq-a">Refunds only if the product they want isn't available. Once an item is successfully sourced and fulfilled to your specifications, all sales are final.</div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">
+          <span>02 / How does Stripe checkout work?</span>
+          <span class="faq-toggle">+</span>
+        </button>
+        <div class="faq-a">You can purchase items right there on the product card with 1-click Stripe checkout, or add multiple items to your cart and checkout your bag via Stripe.</div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">
+          <span>03 / Why is a product reference photo required?</span>
+          <span class="faq-toggle">+</span>
+        </button>
+        <div class="faq-a">Because we source the exact version, wash, and graphics you desire, uploading a photo gives our fulfillment team 100% precision.</div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">
+          <span>04 / How do I contact cosresells directly?</span>
+          <span class="faq-toggle">+</span>
+        </button>
+        <div class="faq-a">Email: coslikesj@gmail.com | Phone: 914-689-1796 | Instagram: @cosresells | TikTok: @cosresells.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="section-shell">
+      <div class="footer-main">
+        <div class="footer-brand">
+          <a href="#" class="wordmark" style="color:#fff;">cosresells<span class="wordmark-star">✳</span></a>
+          <p>Curated luxury &amp; streetwear reselling. You choose the colorway &amp; size. We source the grail.</p>
+          <div class="footer-policy-alert">⚠️ Refund Policy: Refunds only if the product they want isn&apos;t available.</div>
+        </div>
+        <div class="footer-links">
+          <div class="footer-col">
+            <h4>EXPLORE</h4>
+            <a href="#catalog">Shop Catalog</a>
+            <a href="#how-it-works">How It Works</a>
+            <a href="#special-request">Special Request Form</a>
+            <a href="#reviews">Customer Reviews</a>
+            <a href="#faq">Store FAQ</a>
+          </div>
+          <div class="footer-col">
+            <h4>GET IN TOUCH</h4>
+            <a href="mailto:coslikesj@gmail.com">coslikesj@gmail.com</a>
+            <a href="tel:+19146891796">914-689-1796</a>
+            <a href="https://www.instagram.com/cosresells/" target="_blank" rel="noopener">Instagram (@cosresells) ↗</a>
+            <a href="https://www.tiktok.com/@cosresells" target="_blank" rel="noopener">TikTok (@cosresells) ↗</a>
+          </div>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <div>© <span id="year"></span> COSRESELLS. ALL RIGHTS RESERVED.</div>
+        <div>REFUNDS ONLY IF REQUESTED PRODUCT IS UNAVAILABLE.</div>
+        <div>INSTAGRAM: @COSRESELLS · TIKTOK: @COSRESELLS</div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Product Customization Modal -->
+  <div class="modal-overlay" id="product-modal">
+    <div class="modal-box">
+      <button class="modal-close" onclick="closeProductModal()">×</button>
+      <div class="modal-img-wrap">
+        <img id="modal-product-img" src="" alt="Product">
+      </div>
+      <div class="modal-content">
+        <div class="eyebrow" id="modal-product-cat">FOOTWEAR</div>
+        <h3 id="modal-product-title">Product Name</h3>
+        <div style="margin-bottom:14px;">
+          <span class="card-stripe-pill">🔒 Official Stripe Checkout</span>
+        </div>
+        <p style="font-size:13px; color:#666; margin-bottom:14px;" id="modal-product-hint">
+          Input your desired colorway, specific size, and attach a product reference photo.
+        </p>
+
+        <form id="modal-product-form" onsubmit="handleAddToBagFromModal(event)">
+          <div class="form-group">
+            <label>Your Email Address <span>*</span></label>
+            <input type="email" id="modal-email" required placeholder="you@example.com">
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Requested Colorway <span>*</span></label>
+              <input type="text" id="modal-colorway" required placeholder="e.g. Washed Black, Grey">
+            </div>
+            <div class="form-group">
+              <label>Specific Size <span>*</span></label>
+              <input type="text" id="modal-size" required placeholder="e.g. Men's US 10.5 / EU 44">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Product Reference Photo <span>* (Required)</span></label>
+            <input type="file" id="modal-file" accept="image/*" style="display:none;" onchange="handleModalFileSelect(this)">
+            <div class="upload-btn-area" onclick="document.getElementById('modal-file').click()">
+              <img id="modal-upload-preview" class="upload-preview" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' fill='none' stroke='%23999' stroke-width='2'%3E%3Cpath d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/%3E%3Cpolyline points='17 8 12 3 7 8'/%3E%3Cline x1='12' y1='3' x2='12' y2='15'/%3E%3C/svg%3E">
+              <div>
+                <strong style="font-size:12px; display:block;" id="modal-upload-label">Click to upload product photo</strong>
+                <small style="font-size:11px; color:#888;">JPG, PNG, WebP</small>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:14px;">
+            <button type="submit" class="btn btn-outline">Add to Bag 🛍️</button>
+            <button type="button" class="btn btn-orange" onclick="handleBuyNowFromModal()">Buy with Stripe ↗</button>
+          </div>
+          <div style="font-size:10px; color:#888; font-weight:800; text-align:center; margin-top:10px;">
+            REFUNDS ONLY IF REQUESTED PRODUCT IS UNAVAILABLE
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Shopping Bag Drawer -->
+  <div class="drawer-overlay" id="bag-overlay" onclick="toggleBag(false)"></div>
+  <aside class="bag-drawer" id="bag-drawer">
+    <div class="drawer-head">
+      <div>
+        <span class="eyebrow" style="margin:0;">YOUR CART</span>
+        <h3 style="font-size:24px; font-weight:900;">Shopping Bag</h3>
+      </div>
+      <button class="modal-close" style="position:static;" onclick="toggleBag(false)">×</button>
+    </div>
+    <div class="drawer-items" id="bag-items-list">
+      <!-- Items dynamically injected -->
+    </div>
+    <div class="drawer-foot" id="bag-drawer-foot" style="display:none;">
+      <button class="btn btn-orange" style="width:100%; margin-bottom:8px;" onclick="openAllBagStripeLinks()">
+        Checkout All via Stripe ↗
+      </button>
+      <p style="font-size:11px; color:#777; text-align:center;">
+        🔒 Checkout operated by Stripe. Refunds only if requested product is unavailable.
+      </p>
+    </div>
+  </aside>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+
+
+  <script>
+    document.getElementById('year').textContent = new Date().getFullYear();
+
+    const CHECKOUT_URL = 'https://jeromegyasi05.app.n8n.cloud/webhook/stripe-cart-checkout';
+
+    // 15 Stripe Products with Price IDs exactly as requested
+    const products = [
+      { id: "price_1UKPSjCp8OKiv9OD0pQUiSUD", name: "Balenciaga Runners", category: "Footwear", image: "https://images.pexels.com/photos/19869753/pexels-photo-19869753.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", price: 130, tag: "FEATURED", hint: "Specify EU or US shoe size (e.g. EU 43 / US 10 M)." },
+      { id: "price_1UKP1tCp8OKiv9ODeN25rlCT", name: "Essentials Hoodie", category: "Tops", image: "https://images.pexels.com/photos/20248582/pexels-photo-20248582.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", price: 60, tag: "STAPLE", hint: "Specify size & fit (e.g. Size Medium - Relaxed)." },
+      { id: "price_1UKPlYCp8OKiv9ODN35XnbDX", name: "Maison Margiela Gats", category: "Footwear", image: "https://images.pexels.com/photos/18533668/pexels-photo-18533668.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", price: 110, tag: "LUXURY", hint: "Specify EU shoe size (e.g. IT/EU 42 or US Men's 9)." },
+      { id: "price_1UKPacCp8OKiv9OD1aso775f", name: "Chrome Hearts Hoodie", category: "Tops", image: "https://images.pexels.com/photos/2416871/pexels-photo-2416871.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", price: 90, tag: "GRAIL", hint: "Specify Zip-Up vs Pullover and size (e.g. Zip-Up in Large)." },
+      { id: "price_1UKPWtCp8OKiv9ODuKlkZiTn", name: "Chrome Hearts Tee", category: "Tops", image: "https://images.pexels.com/photos/14786536/pexels-photo-14786536.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", price: 40, hint: "Specify size (S, M, L, XL, XXL) & graphic preference." },
+      { id: "price_1UKOhUCp8OKiv9ODtUj4RNB0", name: "Balenciaga Slides", category: "Footwear", image: "https://images.pexels.com/photos/37305531/pexels-photo-37305531.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", price: 60, hint: "Specify EU shoe size (e.g. EU 41 / US 8)." },
+      { id: "price_1UKOyTCp8OKiv9ODkphwhBcF", name: "Balenciaga Slides (With Box)", category: "Footwear", image: "https://images.pexels.com/photos/37305531/pexels-photo-37305531.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", price: 65, tag: "OG ALL", hint: "Specify EU shoe size. Includes box & dust bag." },
+      { id: "price_1UKPNxCp8OKiv9OD8jiUJ6RD", name: "Essentials Pants/Sweats", category: "Bottoms", image: "https://images.pexels.com/photos/18533668/pexels-photo-18533668.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", price: 55, hint: "Specify waist size (e.g. Small = 30-31, Medium = 32-33)." },
+      { id: "price_1UKPQzCp8OKiv9OD1biMoZFJ", name: "Essentials Shorts", category: "Bottoms", image: "https://images.pexels.com/photos/18533668/pexels-photo-18533668.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", price: 50, hint: "Specify waist/letter size (e.g. Medium / 32 waist)." },
+      { id: "price_1UKPRmCp8OKiv9ODEj4RjenL", name: "Essential Tees", category: "Tops", image: "https://images.pexels.com/photos/14786536/pexels-photo-14786536.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", price: 40, hint: "Specify size (e.g. Medium for relaxed drape)." },
+      { id: "price_1UKPXjCp8OKiv9OD94Pq4BVm", name: "Chrome Hearts Long Sleeve", category: "Tops", image: "https://images.pexels.com/photos/14786536/pexels-photo-14786536.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", price: 50, hint: "Specify size (S, M, L, XL, XXL) & sleeve print." },
+      { id: "price_1UKPk4Cp8OKiv9ODZqBjWFMJ", name: "Maison Margiela Tee", category: "Tops", image: "https://images.pexels.com/photos/14786536/pexels-photo-14786536.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", price: 50, hint: "Specify size (e.g. IT 48 / US Medium)." },
+      { id: "price_1UKPlwCp8OKiv9OD3nsJkUd4", name: "Gallery Dept Tee", category: "Tops", image: "https://images.pexels.com/photos/14786536/pexels-photo-14786536.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", price: 50, tag: "VINTAGE WASH", hint: "Specify size (e.g. Size Large)." },
+      { id: "price_1UKRIqCp8OKiv9ODtojlQn3j", name: "Chrome Heart Socks", category: "Accessories", image: "https://images.pexels.com/photos/19882424/pexels-photo-19882424.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", price: 25, hint: "One size fits most (US 7-12). Specify color." },
+      { id: "price_1UKRL8Cp8OKiv9OD3Nu6MBnu", name: "Supreme Socks", category: "Accessories", image: "https://images.pexels.com/photos/19882424/pexels-photo-19882424.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", price: 25, hint: "Specify Crew or Quarter and color." }
+    ];
+
+    let currentCategory = 'All';
+    let currentSearch = '';
+    let selectedProduct = null;
+    let uploadedImageBase64 = '';
+    let bag = [];
+
+    try {
+      const saved = localStorage.getItem('cosresells_gh_bag');
+      if (saved) bag = JSON.parse(saved);
+    } catch(e) {}
+    updateBagUI();
+
+    function renderGrid() {
+      const grid = document.getElementById('product-grid');
+      const filtered = products.filter(p => {
+        const matchesCat = currentCategory === 'All' || p.category === currentCategory;
+        const matchesSearch = p.name.toLowerCase().includes(currentSearch.toLowerCase());
+        return matchesCat && matchesSearch;
+      });
+
+      if (filtered.length === 0) {
+        grid.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:40px; color:#888;">No pieces found. Try another search.</div>';
+        return;
+      }
+
+      grid.innerHTML = filtered.map(p => `
+        <article class="product-card" onclick="openProductModal('${p.id}')">
+          <div class="card-img-wrap">
+            <img src="${p.image}" alt="${p.name}">
+            ${p.tag ? `<span class="card-tag">${p.tag}</span>` : ''}
+          </div>
+          <div class="card-info">
+            <div>
+              <span class="card-category">${p.category}</span>
+              <h3 class="card-title">${p.name}</h3>
+              <div style="display:flex; align-items:center; gap:8px; margin-top:4px;">
+                <span style="font-size:14px; font-weight:900; color:#ec5b36;">$${p.price} USD</span>
+                <span class="card-stripe-pill">🔒 Stripe</span>
+              </div>
+            </div>
+            <button class="card-arrow" aria-label="Select">↗</button>
+          </div>
+        </article>
+      `).join('');
+    }
+    renderGrid();
+
+    function filterCategory(cat, btn) {
+      currentCategory = cat;
+      document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderGrid();
+    }
+
+    function filterSearch(val) {
+      currentSearch = val;
+      renderGrid();
+    }
+
+    function openProductModal(id) {
+      selectedProduct = products.find(p => p.id === id);
+      if (!selectedProduct) return;
+      document.getElementById('modal-product-title').textContent = selectedProduct.name;
+      document.getElementById('modal-product-cat').textContent = selectedProduct.category.toUpperCase();
+      document.getElementById('modal-product-img').src = selectedProduct.image;
+      document.getElementById('modal-product-hint').textContent = selectedProduct.hint || "Specify your exact colorway and size.";
+      document.getElementById('modal-colorway').value = '';
+      document.getElementById('modal-size').value = '';
+      uploadedImageBase64 = '';
+      document.getElementById('modal-upload-label').textContent = 'Click to upload product photo';
+      document.getElementById('modal-upload-preview').src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' fill='none' stroke='%23999' stroke-width='2'%3E%3Cpath d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/%3E%3Cpolyline points='17 8 12 3 7 8'/%3E%3Cline x1='12' y1='3' x2='12' y2='15'/%3E%3C/svg%3E";
+      document.getElementById('product-modal').classList.add('active');
+    }
+
+    function closeProductModal() {
+      document.getElementById('product-modal').classList.remove('active');
+      selectedProduct = null;
+    }
+
+    function handleModalFileSelect(input) {
+      const file = input.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        uploadedImageBase64 = e.target.result;
+        document.getElementById('modal-upload-preview').src = uploadedImageBase64;
+        document.getElementById('modal-upload-label').textContent = file.name;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function validateModalFields() {
+      const email = document.getElementById('modal-email').value.trim();
+      const colorway = document.getElementById('modal-colorway').value.trim();
+      const size = document.getElementById('modal-size').value.trim();
+      if (!email || !email.includes('@')) {
+        showToast('Please enter a valid email address.');
+        return false;
+      }
+      if (!colorway) {
+        showToast('Please enter the colorway you want.');
+        return false;
+      }
+      if (!size) {
+        showToast('Please specify the exact size.');
+        return false;
+      }
+      if (!uploadedImageBase64) {
+        showToast('Please upload a product reference photo.');
+        return false;
+      }
+      return { email, colorway, size };
+    }
+
+    function handleAddToBagFromModal(e) {
+      e.preventDefault();
+      const vals = validateModalFields();
+      if (!vals) return;
+      bag.push({
+        uid: Math.random().toString(36).substring(2, 9),
+        productId: selectedProduct.id,
+        name: selectedProduct.name,
+        category: selectedProduct.category,
+        image: selectedProduct.image,
+        email: vals.email,
+        colorway: vals.colorway,
+        size: vals.size,
+        price: selectedProduct.price
+      });
+      saveBag();
+      closeProductModal();
+      toggleBag(true);
+      showToast('Added ' + selectedProduct.name + ' to your bag!');
+    }
+
+    async function handleBuyNowFromModal() {
+      const vals = validateModalFields();
+      if (!vals) return;
+      
+      const payloadItems = [{
+        price: selectedProduct.id,
+        quantity: 1
+      }];
+
+      showToast('Redirecting to Stripe checkout…');
+      
+      // Try direct checkout via n8n webhook or our server-side API proxy to bypass CORS
+      try {
+        const response = await fetch('/api/checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: vals.email, items: [{ productId: selectedProduct.id, colorway: vals.colorway, size: vals.size }] })
+        });
+        const data = await response.json();
+        if (data.url) {
+          window.location.href = data.url;
+          return;
+        }
+      } catch (err) {
+        console.warn('Local proxy failed, trying backup API...', err);
+      }
+
+      // Fallback 2: Call the live verified backend URL directly
+      try {
+        const response = await fetch('https://3000-inifimsfe8k6f0492q3q4.e2b.app/api/checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: vals.email, items: [{ productId: selectedProduct.id, colorway: vals.colorway, size: vals.size }] })
+        });
+        const data = await response.json();
+        if (data.url) {
+          window.location.href = data.url;
+          return;
+        }
+      } catch (err) {
+        console.error('Backup API failed:', err);
+      }
+
+      // Fallback 3: Direct webhook post (useful if CORS headers are ever added to n8n)
+      try {
+        const response = await fetch(CHECKOUT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: payloadItems })
+        });
+        const data = await response.json();
+        if (data.url) {
+          window.location.href = data.url;
+          return;
+        }
+      } catch (err) {
+        alert('Could not initialize Stripe checkout. Please try again or text us at 914-689-1796.');
+      }
+    }
+
+    function toggleBag(open) {
+      const drawer = document.getElementById('bag-drawer');
+      const overlay = document.getElementById('bag-overlay');
+      if (open) {
+        drawer.classList.add('open');
+        overlay.classList.add('active');
+        renderBagItems();
+      } else {
+        drawer.classList.remove('open');
+        overlay.classList.remove('active');
+      }
+    }
+
+    function renderBagItems() {
+      const list = document.getElementById('bag-items-list');
+      const foot = document.getElementById('bag-drawer-foot');
+      if (bag.length === 0) {
+        list.innerHTML = '<div style="text-align:center; padding:40px 10px; color:#888;"><h3>Your bag is empty</h3><p style="font-size:13px; margin-top:6px;">Browse the catalog and add items.</p></div>';
+        foot.style.display = 'none';
+        return;
+      }
+      foot.style.display = 'block';
+      let total = 0;
+      list.innerHTML = bag.map((it, idx) => {
+        total += it.price;
+        return `
+          <div class="bag-item-card">
+            <img src="${it.image}" alt="${it.name}">
+            <div class="bag-item-info">
+              <span style="font-size:10px; color:#888; font-weight:800; text-transform:uppercase;">${it.category}</span>
+              <h4 style="margin:2px 0;">${it.name}</h4>
+              <p><strong>Color:</strong> ${it.colorway}</p>
+              <p><strong>Size:</strong> <span style="color:var(--orange); font-weight:700;">${it.size}</span></p>
+              <p><strong>Price:</strong> $${it.price} USD</p>
+              <div style="margin-top:8px; display:flex; justify-content:space-between; align-items:center;">
+                <button onclick="removeBagItem(${idx})" style="font-size:11px; color:#bd361e; text-decoration:underline;">Remove</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function removeBagItem(idx) {
+      bag.splice(idx, 1);
+      saveBag();
+      renderBagItems();
+      updateBagUI();
+    }
+
+    async function openAllBagStripeLinks() {
+      if (bag.length === 0) return;
+      const checkoutBtn = document.querySelector('#bag-drawer-foot .btn-orange');
+      if (checkoutBtn) {
+        checkoutBtn.disabled = true;
+        checkoutBtn.textContent = 'Preparing checkout…';
+      }
+
+      const payloadItems = bag.map(it => ({
+        price: it.productId,
+        quantity: 1
+      }));
+
+      // 1. Try local server-side API proxy
+      let succeeded = false;
+      try {
+        const response = await fetch('/api/checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: 'bag-checkout@cosresells.com',
+            items: bag.map(it => ({ productId: it.productId, colorway: it.colorway, size: it.size }))
+          })
+        });
+        const data = await response.json();
+        if (data.url) {
+          bag = [];
+          saveBag();
+          window.location.href = data.url;
+          succeeded = true;
+          return;
+        }
+      } catch (err) {
+        console.warn('Local proxy failed, trying backup API...', err);
+      }
+
+      // 2. Try the live verified backend URL directly
+      if (!succeeded) {
+        try {
+          const response = await fetch('https://3000-inifimsfe8k6f0492q3q4.e2b.app/api/checkout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: 'bag-checkout@cosresells.com',
+              items: bag.map(it => ({ productId: it.productId, colorway: it.colorway, size: it.size }))
+            })
+          });
+          const data = await response.json();
+          if (data.url) {
+            bag = [];
+            saveBag();
+            window.location.href = data.url;
+            succeeded = true;
+            return;
+          }
+        } catch (err) {
+          console.warn('Backup API failed, trying direct webhook...', err);
+        }
+      }
+
+      // 3. Fallback: Direct webhook post
+      if (!succeeded) {
+        try {
+          const response = await fetch(CHECKOUT_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ items: payloadItems })
+          });
+          const data = await response.json();
+          if (data.url) {
+            bag = [];
+            saveBag();
+            window.location.href = data.url;
+            return;
+          }
+          alert(data.error || 'Checkout failed. Please try again.');
+        } catch (err) {
+          alert('Could not initialize Stripe checkout. Please try again or text us at 914-689-1796.');
+        } finally {
+          if (checkoutBtn) {
+            checkoutBtn.disabled = false;
+            checkoutBtn.textContent = 'Checkout All via Stripe ↗';
+          }
+        }
+      }
+    }
+
+    function saveBag() {
+      try { localStorage.setItem('cosresells_gh_bag', JSON.stringify(bag)); } catch(e) {}
+      updateBagUI();
+    }
+
+    function updateBagUI() {
+      document.getElementById('header-bag-count').textContent = bag.length;
+    }
+
+    // Special Request Form → FormSubmit (AJAX POST directly to coslikesj@gmail.com)
+    (function setupSpecialRequestForm() {
+      const FORMSUBMIT_ENDPOINT = "https://formsubmit.co/ajax/coslikesj@gmail.com";
+      const form = document.getElementById('special-request-form');
+      const btn = document.getElementById('req-submit-btn');
+      const statusBox = document.getElementById('request-status-box');
+      const errorBox = document.getElementById('request-error-box');
+      if (!form) return;
+
+      form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        if (statusBox) statusBox.style.display = 'none';
+        if (errorBox) errorBox.style.display = 'none';
+        if (btn) { btn.disabled = true; btn.textContent = 'Sending to cosresells…'; }
+
+        const data = new FormData(form);
+        const payload = Object.fromEntries(data);
+
+        try {
+          const response = await fetch(FORMSUBMIT_ENDPOINT, {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Accept': 'application/json' 
+            },
+            body: JSON.stringify(payload)
+          });
+
+          const resData = await response.json();
+
+          if (response.ok && (resData.success === "true" || resData.success === true)) {
+            form.reset();
+            if (statusBox) statusBox.style.display = 'block';
+            showToast('Special request sent successfully via FormSubmit!');
+            setTimeout(function() {
+              statusBox && statusBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 150);
+          } else {
+            if (errorBox) errorBox.style.display = 'block';
+            showToast('Could not send request. FormSubmit activation may be pending.');
+          }
+        } catch (err) {
+          console.warn('FormSubmit submission error:', err);
+          if (errorBox) errorBox.style.display = 'block';
+          showToast('Could not send request. Please email coslikesj@gmail.com.');
+        } finally {
+          if (btn) { btn.disabled = false; btn.textContent = 'Send Special Request ↗'; }
+        }
+      });
+    })();
+
+    function toggleFaq(btn) {
+      const item = btn.parentElement;
+      item.classList.toggle('open');
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => { t.classList.remove('show'); }, 4000);
+    }
+
+    // Google Sheets Live Reviews Loader (Only Actual Reviews)
+    const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR4qULFeKP6nV1DXoTY2fqZAwJ57-lCpmU-SA4WHQBCFY_HXNYJffvf91dCshfS_Xrz4phbGt8di9bc/pub?output=csv";
+
+    async function loadGoogleSheetReviews() {
+      const container = document.getElementById('reviews-container');
+      const ratingText = document.getElementById('rating-summary-text');
+      container.innerHTML = '<div style="text-align:center; padding:30px; color:#888;">Syncing verified customer reviews from Google Sheets...</div>';
+
+      try {
+        const res = await fetch(SHEET_CSV_URL);
+        const text = await res.text();
+        const rows = parseSimpleCsv(text);
+
+        let liveReviews = [];
+
+        if (rows.length > 1) {
+          const headers = rows[0].map(h => h.toLowerCase());
+          const timeIdx = headers.findIndex(h => h.includes("timestamp") || h.includes("date"));
+          const firstIdx = headers.findIndex(h => h.includes("first name") || h.includes("first"));
+          const lastIdx = headers.findIndex(h => h.includes("last name") || h.includes("last"));
+          const emailIdx = headers.findIndex(h => h.includes("email"));
+          const commentIdx = headers.findIndex(h => h.includes("comment") || h.includes("review") || h.includes("leave"));
+          const imgIdx = headers.findIndex(h => h.includes("image") || h.includes("photo") || h.includes("product"));
+
+          for (let i = 1; i < rows.length; i++) {
+            const r = rows[i];
+            const comment = commentIdx !== -1 && r[commentIdx] ? r[commentIdx].trim() : "";
+            if (!comment) continue;
+
+            const fn = firstIdx !== -1 && r[firstIdx] ? r[firstIdx].trim() : "";
+            const ln = lastIdx !== -1 && r[lastIdx] ? r[lastIdx].trim() : "";
+            const em = emailIdx !== -1 && r[emailIdx] ? r[emailIdx].trim() : "";
+            const dateStr = timeIdx !== -1 && r[timeIdx] ? r[timeIdx].trim() : "Recent";
+            const imgUrl = imgIdx !== -1 && r[imgIdx] ? r[imgIdx].trim() : "";
+
+            let name = fn ? fn.charAt(0).toUpperCase() + fn.slice(1) : "";
+            if (name && ln) name += " " + ln.charAt(0).toUpperCase() + ".";
+            if (!name && em && em.includes("@")) name = em.split("@")[0].charAt(0).toUpperCase() + em.split("@")[0].slice(1);
+            if (!name) name = "Verified Customer";
+
+            liveReviews.unshift({
+              name: name,
+              time: dateStr,
+              comment: comment,
+              imageUrl: imgUrl && imgUrl.startsWith("http") ? imgUrl : null,
+              rating: 5
+            });
+          }
+        }
+
+        if (liveReviews.length === 0) {
+          if (ratingText) ratingText.innerHTML = '<strong>Verified Customer Reviews</strong> (Live Google Sheets Feed)';
+          container.innerHTML = `
+            <div style="text-align:center; padding:40px 20px; color:#777; background:#faf8f2; border:1px dashed #dcdcd5; border-radius:2px;">
+              <div style="font-size:28px; margin-bottom:8px;">💬</div>
+              <h4 style="font-size:16px; font-weight:800; color:#181917; margin:0 0 4px;">No reviews submitted yet</h4>
+              <p style="margin:0; font-size:13px;">Submit your review via the form on the left to be the first one featured!</p>
+            </div>
+          `;
+        } else {
+          if (ratingText) ratingText.innerHTML = '<strong>5.0</strong> (' + liveReviews.length + ' Verified Customer Review' + (liveReviews.length === 1 ? '' : 's') + ')';
+          container.innerHTML = liveReviews.map(rev => `
+            <div class="review-card">
+              <div class="review-card-top">
+                <div>
+                  <div class="reviewer-name">
+                    ${rev.name}
+                    <span class="verified-buyer-pill">Verified Buyer</span>
+                  </div>
+                </div>
+                <span class="review-date">${rev.time}</span>
+              </div>
+              <p class="review-comment">“${rev.comment}”</p>
+              ${rev.imageUrl ? `<img src="${rev.imageUrl}" alt="Customer product photo" style="margin-top:10px; max-width:140px; border-radius:2px; border:1px solid #ddd;">` : ''}
+            </div>
+          `).join('');
+        }
+
+        showToast('Synced ' + liveReviews.length + ' customer reviews from Google Sheets!');
+      } catch (err) {
+        console.warn("Sheet fetch error:", err);
+        container.innerHTML = `
+          <div style="text-align:center; padding:40px 20px; color:#777;">
+            <p>Could not sync live reviews. Please click "🔄 Sync Live" to retry.</p>
+          </div>
+        `;
+      }
+    }
+
+    function parseSimpleCsv(text) {
+      const p = [];
+      let row = [];
+      let inQ = false;
+      let cur = "";
+      for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        const next = text[i + 1];
+        if (c === '"') {
+          if (inQ && next === '"') { cur += '"'; i++; }
+          else { inQ = !inQ; }
+        } else if (c === ',' && !inQ) {
+          row.push(cur.trim());
+          cur = "";
+        } else if ((c === '\r' || c === '\n') && !inQ) {
+          if (c === '\r' && next === '\n') i++;
+          row.push(cur.trim());
+          if (row.some(x => x.length > 0)) p.push(row);
+          row = [];
+          cur = "";
+        } else {
+          cur += c;
+        }
+      }
+      if (cur || row.length > 0) {
+        row.push(cur.trim());
+        if (row.some(x => x.length > 0)) p.push(row);
+      }
+      return p;
+    }
+
+    // Load reviews on initial load
+    loadGoogleSheetReviews();
+  </script>
+</body>
+</html>
