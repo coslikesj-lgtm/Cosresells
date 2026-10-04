@@ -963,7 +963,7 @@
         <h2>THE <em>CATALOG.</em></h2>
         <p>Click any piece to choose your desired colorway, exact size, and upload a product reference image.</p>
       </div>
-      <div style="font-size:11px; font-weight:800; color:#888; letter-spacing:0.14em;">16 VERIFIED PIECES</div>
+      <div style="font-size:11px; font-weight:800; color:#888; letter-spacing:0.14em;">15 VERIFIED PIECES</div>
     </div>
 
     <!-- Toolbar -->
@@ -1039,9 +1039,12 @@
     </div>
 
     <div class="request-form-card">
-      <!-- Formspree AJAX form: delivers straight to coslikesj@gmail.com inbox -->
-      <form id="special-request-form">
+      <!-- FormSubmit: AJAX delivers to coslikesj@gmail.com; action is the no-JS fallback -->
+      <input type="hidden" name="_template" value="table">
+      <input type="hidden" name="_captcha" value="false">
+      <form id="special-request-form" action="https://formsubmit.co/coslikesj@gmail.com" method="POST" onsubmit="handleSpecialRequestSubmit(event)">
         <input type="hidden" name="_subject" value="New cosresells Special Request">
+        
 
         <div class="form-row">
           <div class="form-group">
@@ -1108,21 +1111,17 @@
         </div>
 
         <button type="submit" class="btn btn-orange" style="width:100%;" id="req-submit-btn">
-          Send Special Request ↗
+          Send Special Request Directly ↗
         </button>
 
         <div id="request-status-box" style="display:none; margin-top:16px; background:#ddead7; padding:18px 20px; font-size:13px; color:#244b34; border-radius:2px; border-left:4px solid #2b7a4b;">
-          <div style="font-weight:900; font-size:14px; margin-bottom:6px;">✓ Special Request Sent!</div>
-          <p id="request-status-msg" style="margin:0 0 12px; color:#444; line-height:1.5;">Thanks! Your request has been emailed directly to coslikesj@gmail.com. We&apos;ll reply to the email you provided with sourcing details and pricing.</p>
+          <div style="font-weight:900; font-size:14px; margin-bottom:6px;">✓ Special Request Logged &amp; Received!</div>
+          <p id="request-status-msg" style="margin:0 0 12px; color:#444; line-height:1.5;">Your sourcing request has been submitted. You can also send a direct copy from your email app or text us below:</p>
           <div style="display:flex; gap:10px; flex-wrap:wrap;">
-            <a href="mailto:coslikesj@gmail.com" class="btn btn-orange" style="font-size:12px; min-height:38px; padding:0 14px;">✉️ Follow up by email ↗</a>
+            <a id="req-mailto-btn" href="#" class="btn btn-orange" style="font-size:12px; min-height:38px; padding:0 14px;">✉️ Send from Email App ↗</a>
+            <a id="req-sms-btn" href="#" class="btn btn-dark" style="font-size:12px; min-height:38px; padding:0 14px;">💬 Text 914-689-1796 ↗</a>
             <a href="https://www.instagram.com/cosresells/" target="_blank" rel="noopener" class="btn btn-outline" style="font-size:12px; min-height:38px; padding:0 14px;">📸 DM @cosresells ↗</a>
           </div>
-        </div>
-
-        <div id="request-error-box" style="display:none; margin-top:14px; background:#fdecec; color:#8c1d1d; padding:14px 16px; font-size:13px; border-radius:2px; border-left:4px solid #c0392b;">
-          <strong>Could not send your request.</strong> Please email us directly at
-          <a href="mailto:coslikesj@gmail.com" style="color:#8c1d1d; text-decoration:underline; font-weight:800;">coslikesj@gmail.com</a>.
         </div>
       </form>
     </div>
@@ -1320,7 +1319,7 @@
 
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:14px;">
             <button type="submit" class="btn btn-outline">Add to Bag 🛍️</button>
-            <button type="button" class="btn btn-orange" onclick="handleBuyNowFromModal()">Buy with Stripe ↗</button>
+            <button type="button" id="buy-now-btn" class="btn btn-orange" onclick="handleBuyNowFromModal(this)">Buy with Stripe ↗</button>
           </div>
           <div style="font-size:10px; color:#888; font-weight:800; text-align:center; margin-top:10px;">
             REFUNDS ONLY IF REQUESTED PRODUCT IS UNAVAILABLE
@@ -1344,7 +1343,7 @@
       <!-- Items dynamically injected -->
     </div>
     <div class="drawer-foot" id="bag-drawer-foot" style="display:none;">
-      <button class="btn btn-orange" style="width:100%; margin-bottom:8px;" onclick="openAllBagStripeLinks()">
+      <button id="checkout-btn" class="btn btn-orange" style="width:100%; margin-bottom:8px;" onclick="openAllBagStripeLinks(this)">
         Checkout All via Stripe ↗
       </button>
       <p style="font-size:11px; color:#777; text-align:center;">
@@ -1352,6 +1351,9 @@
       </p>
     </div>
   </aside>
+
+  <!-- Floating cart button -->
+  <button id="cart-btn" onclick="toggleBag(true)" style="position:fixed;bottom:20px;right:20px;z-index:9999;background:#000;color:#fff;border:none;border-radius:30px;padding:14px 22px;font-size:16px;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.25);">Cart (<span id="cart-count">0</span>) · <span id="cart-total-float">$0.00</span></button>
 
   <!-- Toast -->
   <div class="toast" id="toast"></div>
@@ -1363,23 +1365,42 @@
 
     const CHECKOUT_URL = 'https://jeromegyasi05.app.n8n.cloud/webhook/stripe-cart-checkout';
 
-    // 15 Stripe Products with Price IDs exactly as requested
+    // All products -> Stripe price IDs (prices in dollars, for display only; Stripe charges the real price)
+    const PRODUCTS = {
+      'price_1UKOhUCp8OKiv9ODtUj4RNB0': { name: 'Balenciaga Slides', price: 60 },
+      'price_1UKOyTCp8OKiv9ODkphwhBcF': { name: 'Balenciaga Slides (With Box)', price: 65 },
+      'price_1UKP1tCp8OKiv9ODeN25rlCT': { name: 'Essentials Hoodie', price: 60 },
+      'price_1UKPNxCp8OKiv9OD8jiUJ6RD': { name: 'Essentials Pants/Sweats', price: 55 },
+      'price_1UKPQzCp8OKiv9OD1biMoZFJ': { name: 'Essentials Shorts', price: 50 },
+      'price_1UKPRmCp8OKiv9ODEj4RjenL': { name: 'Essential Tees', price: 40 },
+      'price_1UKPSjCp8OKiv9OD0pQUiSUD': { name: 'Balenciaga Runners', price: 130 },
+      'price_1UKPWtCp8OKiv9ODuKlkZiTn': { name: 'Chrome Hearts Tee', price: 40 },
+      'price_1UKPXjCp8OKiv9OD94Pq4BVm': { name: 'Chrome Hearts Long Sleeve', price: 50 },
+      'price_1UKPacCp8OKiv9OD1aso775f': { name: 'Chrome Hearts Hoodie', price: 90 },
+      'price_1UKPk4Cp8OKiv9ODZqBjWFMJ': { name: 'Maison Margiela Tee', price: 50 },
+      'price_1UKPlYCp8OKiv9ODN35XnbDX': { name: 'Maison Margiela Gats', price: 110 },
+      'price_1UKPlwCp8OKiv9OD3nsJkUd4': { name: 'Gallery Dept Tee', price: 50 },
+      'price_1UKRIqCp8OKiv9ODtojlQn3j': { name: 'Chrome Heart Socks', price: 25 },
+      'price_1UKRL8Cp8OKiv9OD3Nu6MBnu': { name: 'Supreme Socks', price: 25 }
+    };
+
+    // Catalog display (price IDs + display prices + photos + sizing hints)
     const products = [
-      { id: "price_1UKPSjCp8OKiv9OD0pQUiSUD", name: "Balenciaga Runners", category: "Footwear", image: "https://images.pexels.com/photos/19869753/pexels-photo-19869753.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", price: 130, tag: "FEATURED", hint: "Specify EU or US shoe size (e.g. EU 43 / US 10 M)." },
-      { id: "price_1UKP1tCp8OKiv9ODeN25rlCT", name: "Essentials Hoodie", category: "Tops", image: "https://images.pexels.com/photos/20248582/pexels-photo-20248582.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", price: 60, tag: "STAPLE", hint: "Specify size & fit (e.g. Size Medium - Relaxed)." },
-      { id: "price_1UKPlYCp8OKiv9ODN35XnbDX", name: "Maison Margiela Gats", category: "Footwear", image: "https://images.pexels.com/photos/18533668/pexels-photo-18533668.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", price: 110, tag: "LUXURY", hint: "Specify EU shoe size (e.g. IT/EU 42 or US Men's 9)." },
-      { id: "price_1UKPacCp8OKiv9OD1aso775f", name: "Chrome Hearts Hoodie", category: "Tops", image: "https://images.pexels.com/photos/2416871/pexels-photo-2416871.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", price: 90, tag: "GRAIL", hint: "Specify Zip-Up vs Pullover and size (e.g. Zip-Up in Large)." },
-      { id: "price_1UKPWtCp8OKiv9ODuKlkZiTn", name: "Chrome Hearts Tee", category: "Tops", image: "https://images.pexels.com/photos/14786536/pexels-photo-14786536.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", price: 40, hint: "Specify size (S, M, L, XL, XXL) & graphic preference." },
-      { id: "price_1UKOhUCp8OKiv9ODtUj4RNB0", name: "Balenciaga Slides", category: "Footwear", image: "https://images.pexels.com/photos/37305531/pexels-photo-37305531.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", price: 60, hint: "Specify EU shoe size (e.g. EU 41 / US 8)." },
-      { id: "price_1UKOyTCp8OKiv9ODkphwhBcF", name: "Balenciaga Slides (With Box)", category: "Footwear", image: "https://images.pexels.com/photos/37305531/pexels-photo-37305531.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", price: 65, tag: "OG ALL", hint: "Specify EU shoe size. Includes box & dust bag." },
-      { id: "price_1UKPNxCp8OKiv9OD8jiUJ6RD", name: "Essentials Pants/Sweats", category: "Bottoms", image: "https://images.pexels.com/photos/18533668/pexels-photo-18533668.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", price: 55, hint: "Specify waist size (e.g. Small = 30-31, Medium = 32-33)." },
-      { id: "price_1UKPQzCp8OKiv9OD1biMoZFJ", name: "Essentials Shorts", category: "Bottoms", image: "https://images.pexels.com/photos/18533668/pexels-photo-18533668.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", price: 50, hint: "Specify waist/letter size (e.g. Medium / 32 waist)." },
-      { id: "price_1UKPRmCp8OKiv9ODEj4RjenL", name: "Essential Tees", category: "Tops", image: "https://images.pexels.com/photos/14786536/pexels-photo-14786536.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", price: 40, hint: "Specify size (e.g. Medium for relaxed drape)." },
-      { id: "price_1UKPXjCp8OKiv9OD94Pq4BVm", name: "Chrome Hearts Long Sleeve", category: "Tops", image: "https://images.pexels.com/photos/14786536/pexels-photo-14786536.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", price: 50, hint: "Specify size (S, M, L, XL, XXL) & sleeve print." },
-      { id: "price_1UKPk4Cp8OKiv9ODZqBjWFMJ", name: "Maison Margiela Tee", category: "Tops", image: "https://images.pexels.com/photos/14786536/pexels-photo-14786536.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", price: 50, hint: "Specify size (e.g. IT 48 / US Medium)." },
-      { id: "price_1UKPlwCp8OKiv9OD3nsJkUd4", name: "Gallery Dept Tee", category: "Tops", image: "https://images.pexels.com/photos/14786536/pexels-photo-14786536.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", price: 50, tag: "VINTAGE WASH", hint: "Specify size (e.g. Size Large)." },
-      { id: "price_1UKRIqCp8OKiv9ODtojlQn3j", name: "Chrome Heart Socks", category: "Accessories", image: "https://images.pexels.com/photos/19882424/pexels-photo-19882424.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", price: 25, hint: "One size fits most (US 7-12). Specify color." },
-      { id: "price_1UKRL8Cp8OKiv9OD3Nu6MBnu", name: "Supreme Socks", category: "Accessories", image: "https://images.pexels.com/photos/19882424/pexels-photo-19882424.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", price: 25, hint: "Specify Crew or Quarter and color." }
+      { id: "plink_1ULv5FCp8OKiv9ODyWrTRFvB", priceId: "price_1UKPSjCp8OKiv9OD0pQUiSUD", name: "Balenciaga Runners", category: "Footwear", price: 130, stripeUrl: "https://buy.stripe.com/8x2bJ047bcdY64f96Q5gc0o", image: "https://images.pexels.com/photos/19869753/pexels-photo-19869753.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", tag: "FEATURED", hint: "Specify EU or US shoe size (e.g. EU 43 / US 10 M)." },
+      { id: "plink_1ULv5GCp8OKiv9OD5We7mxh6", priceId: "price_1UKP1tCp8OKiv9ODeN25rlCT", name: "Essentials Hoodie", category: "Tops", price: 60, stripeUrl: "https://buy.stripe.com/eVqdR8gTX7XI8cn0Ak5gc0s", image: "https://images.pexels.com/photos/20248582/pexels-photo-20248582.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", tag: "STAPLE", hint: "Specify size & fit (e.g. Size Medium - Relaxed)." },
+      { id: "plink_1ULv5DCp8OKiv9OD6nT5Vh7e", priceId: "price_1UKPlYCp8OKiv9ODN35XnbDX", name: "Maison Margiela Gats", category: "Footwear", price: 110, stripeUrl: "https://buy.stripe.com/fZu7sKcDHfqa9gr5UE5gc0j", image: "https://images.pexels.com/photos/18533668/pexels-photo-18533668.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", tag: "LUXURY", hint: "Specify EU shoe size (e.g. IT/EU 42 or US Men's 9)." },
+      { id: "plink_1ULv5ECp8OKiv9ODuZ8ls3tt", priceId: "price_1UKPacCp8OKiv9OD1aso775f", name: "Chrome Hearts Hoodie ( Zip Hoodies and Normal Hoodies Available)", category: "Tops", price: 90, stripeUrl: "https://buy.stripe.com/dRm8wOavz6TEgITdn65gc0l", image: "https://images.pexels.com/photos/2416871/pexels-photo-2416871.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", tag: "GRAIL", hint: "Specify Zip-Up vs Pullover and size (e.g. Zip-Up in Large)." },
+      { id: "plink_1ULv5FCp8OKiv9ODoOhFx2Dk", priceId: "price_1UKPWtCp8OKiv9ODuKlkZiTn", name: "Chrome Hearts Tee", category: "Tops", price: 40, stripeUrl: "https://buy.stripe.com/5kQ00ifPT4LwgIT0Ak5gc0n", image: "https://images.pexels.com/photos/14786536/pexels-photo-14786536.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", hint: "Specify size (S, M, L, XL, XXL) & graphic preference." },
+      { id: "plink_1ULv5HCp8OKiv9ODn9u0gDt6", priceId: "price_1UKOhUCp8OKiv9ODtUj4RNB0", name: "Balenciaga Slides", category: "Footwear", price: 60, stripeUrl: "https://buy.stripe.com/00wbJ0cDH5PA3W7gzi5gc0u", image: "https://images.pexels.com/photos/37305531/pexels-photo-37305531.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", hint: "Specify EU shoe size (e.g. EU 41 / US 8)." },
+      { id: "plink_1ULv5HCp8OKiv9ODKGy11p4j", priceId: "price_1UKOyTCp8OKiv9ODkphwhBcF", name: "Balenciaga Slides( With Box)", category: "Footwear", price: 65, stripeUrl: "https://buy.stripe.com/bJedR80UZ6TE9grbeY5gc0t", image: "https://images.pexels.com/photos/37305531/pexels-photo-37305531.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", tag: "OG ALL", hint: "Specify EU shoe size. Includes box & dust bag." },
+      { id: "plink_1ULv5GCp8OKiv9ODBgKEIGNc", priceId: "price_1UKPNxCp8OKiv9OD8jiUJ6RD", name: "Essentials Pants/Sweats", category: "Bottoms", price: 55, stripeUrl: "https://buy.stripe.com/aFafZg9rv2Do50b96Q5gc0r", image: "https://images.pexels.com/photos/18533668/pexels-photo-18533668.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", hint: "Specify waist size (e.g. Small = 30-31, Medium = 32-33)." },
+      { id: "plink_1ULv5GCp8OKiv9ODTN2LdOck", priceId: "price_1UKPQzCp8OKiv9OD1biMoZFJ", name: "Essentials Shorts", category: "Bottoms", price: 50, stripeUrl: "https://buy.stripe.com/3cI6oG47b0vg78j2Is5gc0q", image: "https://images.pexels.com/photos/18533668/pexels-photo-18533668.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", hint: "Specify waist/letter size (e.g. Medium / 32 waist)." },
+      { id: "plink_1ULv5FCp8OKiv9ODXrrzhQoy", priceId: "price_1UKPRmCp8OKiv9ODEj4RjenL", name: "Essential Tees", category: "Tops", price: 40, stripeUrl: "https://buy.stripe.com/6oUaEW8nrem6csD2Is5gc0p", image: "https://images.pexels.com/photos/14786536/pexels-photo-14786536.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", hint: "Specify size (e.g. Medium for relaxed drape)." },
+      { id: "plink_1ULv5ECp8OKiv9ODUyNwfb5m", priceId: "price_1UKPXjCp8OKiv9OD94Pq4BVm", name: "Chrome Hearts Long Sleeve", category: "Tops", price: 50, stripeUrl: "https://buy.stripe.com/cNiaEW9rv0vgbozdn65gc0m", image: "https://images.pexels.com/photos/14786536/pexels-photo-14786536.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", hint: "Specify size (S, M, L, XL, XXL) & sleeve print." },
+      { id: "plink_1ULv5ECp8OKiv9ODXM8wd7Hv", priceId: "price_1UKPk4Cp8OKiv9ODZqBjWFMJ", name: "Maison Margiela Tee", category: "Tops", price: 50, stripeUrl: "https://buy.stripe.com/eVqdR8eLP7XIgITaaU5gc0k", image: "https://images.pexels.com/photos/14786536/pexels-photo-14786536.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", hint: "Specify size (e.g. IT 48 / US Medium)." },
+      { id: "plink_1ULv5DCp8OKiv9ODK83FJGe9", priceId: "price_1UKPlwCp8OKiv9OD3nsJkUd4", name: "Gallery Dept Tee", category: "Tops", price: 50, stripeUrl: "https://buy.stripe.com/eVqcN40UZ1zk3W74QA5gc0i", image: "https://images.pexels.com/photos/14786536/pexels-photo-14786536.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", tag: "VINTAGE WASH", hint: "Specify size (e.g. Size Large)." },
+      { id: "plink_1ULv5DCp8OKiv9ODDMxyWXe9", priceId: "price_1UKRIqCp8OKiv9ODtojlQn3j", name: "Chrome heart socks", category: "Accessories", price: 25, stripeUrl: "https://buy.stripe.com/8x228q3370vg64f4QA5gc0h", image: "https://images.pexels.com/photos/19882424/pexels-photo-19882424.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", hint: "One size fits most (US 7-12). Specify color." },
+      { id: "plink_1ULv5CCp8OKiv9ODpa4phxjC", priceId: "price_1UKRL8Cp8OKiv9OD3Nu6MBnu", name: "Supreme socks", category: "Accessories", price: 25, stripeUrl: "https://buy.stripe.com/aFa7sK337b9UdwH82M5gc0g", image: "https://images.pexels.com/photos/19882424/pexels-photo-19882424.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", hint: "Specify Crew or Quarter and color." }
     ];
 
     let currentCategory = 'All';
@@ -1390,8 +1411,17 @@
 
     try {
       const saved = localStorage.getItem('cosresells_gh_bag');
-      if (saved) bag = JSON.parse(saved);
-    } catch(e) {}
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          bag = parsed.map(it => {
+            const m = products.find(p => p.id === it.productId || p.priceId === it.productId);
+            if (!m) return null;
+            return { ...it, productId: m.id, price: m.price, quantity: Math.max(1, Math.min(99, Number(it.quantity || 1) || 1)) };
+          }).filter(Boolean);
+        } else { bag = []; }
+      }
+    } catch(e) { bag = []; }
     updateBagUI();
 
     function renderGrid() {
@@ -1417,10 +1447,7 @@
             <div>
               <span class="card-category">${p.category}</span>
               <h3 class="card-title">${p.name}</h3>
-              <div style="display:flex; align-items:center; gap:8px; margin-top:4px;">
-                <span style="font-size:14px; font-weight:900; color:#ec5b36;">$${p.price} USD</span>
-                <span class="card-stripe-pill">🔒 Stripe</span>
-              </div>
+              <div><strong>$${p.price}</strong> <span class="card-stripe-pill">🔒 Stripe Checkout</span></div>
             </div>
             <button class="card-arrow" aria-label="Select">↗</button>
           </div>
@@ -1500,81 +1527,81 @@
       e.preventDefault();
       const vals = validateModalFields();
       if (!vals) return;
-      bag.push({
-        uid: Math.random().toString(36).substring(2, 9),
-        productId: selectedProduct.id,
-        name: selectedProduct.name,
-        category: selectedProduct.category,
-        image: selectedProduct.image,
-        email: vals.email,
-        colorway: vals.colorway,
-        size: vals.size,
-        price: selectedProduct.price
-      });
+      const existing = bag.find(b => b.productId === selectedProduct.id && b.colorway === vals.colorway && b.size === vals.size);
+      if (existing) { existing.quantity = Math.min(99, (existing.quantity || 1) + 1); }
+      else {
+        bag.push({
+          uid: Math.random().toString(36).substring(2, 9),
+          productId: selectedProduct.id,
+          name: selectedProduct.name,
+          category: selectedProduct.category,
+          image: selectedProduct.image,
+          price: selectedProduct.price,
+          email: vals.email,
+          colorway: vals.colorway,
+          size: vals.size,
+          quantity: 1
+        });
+      }
       saveBag();
       closeProductModal();
       toggleBag(true);
       showToast('Added ' + selectedProduct.name + ' to your bag!');
     }
 
-    async function handleBuyNowFromModal() {
+    function redirectToStripe(url) {
+      try { window.location.assign(url); } catch (e) {}
+      try { if (window.top && window.top !== window) { window.top.location.href = url; } } catch (e) {}
+      try {
+        const a = document.createElement('a');
+        a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+        document.body.appendChild(a); a.click();
+        setTimeout(() => a.remove(), 1500);
+      } catch (e) {}
+    }
+
+    function priceIdFor(id) {
+      const p = products.find(x => x.id === id || x.priceId === id);
+      return p ? p.priceId : id;
+    }
+
+    async function stripeCheckoutFromBag(items, btn) {
+      const grouped = {};
+      items.forEach(it => { const pid = priceIdFor(it.productId); grouped[pid] = (grouped[pid] || 0) + (it.quantity || 1); });
+      const stripeItems = Object.keys(grouped).map(id => ({ price: id, quantity: grouped[id] }));
+      if (!stripeItems.length) return;
+      const btnEl = typeof btn === 'string' ? document.querySelector(btn) : btn;
+      const oldText = btnEl ? btnEl.innerHTML : '';
+      if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Loading...'; }
+      try {
+        showToast('Connecting to secure Stripe checkout...');
+        const res = await fetch(CHECKOUT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: stripeItems })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data && typeof data.url === 'string' && data.url.indexOf('https://') === 0) {
+          showToast('Opening secure Stripe checkout...');
+          redirectToStripe(data.url);
+          return;
+        }
+        showToast((data && data.error) || 'Checkout failed. Please try again.');
+      } catch (e) { showToast('Could not reach checkout. Please check your connection and try again.'); }
+      if (btnEl) { btnEl.disabled = false; btnEl.innerHTML = oldText; }
+    }
+
+    function handleBuyNowFromModal(btn) {
       const vals = validateModalFields();
       if (!vals) return;
-      
-      const payloadItems = [{
-        price: selectedProduct.id,
-        quantity: 1
-      }];
-
-      showToast('Redirecting to Stripe checkout…');
-      
-      // Try direct checkout via n8n webhook or our server-side API proxy to bypass CORS
       try {
-        const response = await fetch('/api/checkout', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: vals.email, items: [{ productId: selectedProduct.id, colorway: vals.colorway, size: vals.size }] })
-        });
-        const data = await response.json();
-        if (data.url) {
-          window.location.href = data.url;
-          return;
-        }
-      } catch (err) {
-        console.warn('Local proxy failed, trying backup API...', err);
-      }
-
-      // Fallback 2: Call the live verified backend URL directly
-      try {
-        const response = await fetch('https://3000-inifimsfe8k6f0492q3q4.e2b.app/api/checkout', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: vals.email, items: [{ productId: selectedProduct.id, colorway: vals.colorway, size: vals.size }] })
-        });
-        const data = await response.json();
-        if (data.url) {
-          window.location.href = data.url;
-          return;
-        }
-      } catch (err) {
-        console.error('Backup API failed:', err);
-      }
-
-      // Fallback 3: Direct webhook post (useful if CORS headers are ever added to n8n)
-      try {
-        const response = await fetch(CHECKOUT_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ items: payloadItems })
-        });
-        const data = await response.json();
-        if (data.url) {
-          window.location.href = data.url;
-          return;
-        }
-      } catch (err) {
-        alert('Could not initialize Stripe checkout. Please try again or text us at 914-689-1796.');
-      }
+        const url = new URL(selectedProduct.stripeUrl);
+        url.searchParams.set('prefilled_email', vals.email);
+        url.searchParams.set('client_reference_id', 'cos-' + Date.now().toString(36) + '-' + String(selectedProduct.id).slice(-6));
+        redirectToStripe(url.toString());
+        showToast('Opening secure Stripe checkout...');
+      } catch (e) { showToast('Could not open checkout. Please try again.'); }
+      closeProductModal();
     }
 
     function toggleBag(open) {
@@ -1599,25 +1626,29 @@
         return;
       }
       foot.style.display = 'block';
-      let total = 0;
+      const total = bag.reduce((s, it) => s + ((it.price || (PRODUCTS[it.productId] ? PRODUCTS[it.productId].price : 0)) * (it.quantity || 1)), 0);
+      const count = bag.reduce((s, it) => s + (it.quantity || 1), 0);
       list.innerHTML = bag.map((it, idx) => {
-        total += it.price;
+        const unit = it.price || (PRODUCTS[it.productId] ? PRODUCTS[it.productId].price : 0);
         return `
-          <div class="bag-item-card">
-            <img src="${it.image}" alt="${it.name}">
-            <div class="bag-item-info">
-              <span style="font-size:10px; color:#888; font-weight:800; text-transform:uppercase;">${it.category}</span>
-              <h4 style="margin:2px 0;">${it.name}</h4>
-              <p><strong>Color:</strong> ${it.colorway}</p>
-              <p><strong>Size:</strong> <span style="color:var(--orange); font-weight:700;">${it.size}</span></p>
-              <p><strong>Price:</strong> $${it.price} USD</p>
-              <div style="margin-top:8px; display:flex; justify-content:space-between; align-items:center;">
-                <button onclick="removeBagItem(${idx})" style="font-size:11px; color:#bd361e; text-decoration:underline;">Remove</button>
+        <div class="bag-item-card">
+          <img src="${it.image}" alt="${it.name}">
+          <div class="bag-item-info">
+            <span style="font-size:10px; color:#888; font-weight:800; text-transform:uppercase;">${it.category}</span>
+            <h4>${it.name} <span style="font-size:12px; color:var(--orange);">$${unit} each</span></h4>
+            <p><strong>Color:</strong> ${it.colorway}</p>
+            <p><strong>Size:</strong> <span style="color:var(--orange); font-weight:700;">${it.size}</span></p>
+            <div style="margin-top:8px; display:flex; justify-content:space-between; align-items:center;">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <button onclick="changeQty(${idx},-1)" style="width:26px;height:26px;border:1px solid #ddd;border-radius:4px;">-</button>
+                <strong>${it.quantity || 1}</strong>
+                <button onclick="changeQty(${idx},1)" style="width:26px;height:26px;border:1px solid #ddd;border-radius:4px;">+</button>
               </div>
+              <button onclick="removeBagItem(${idx})" style="font-size:11px; color:#bd361e; text-decoration:underline;">Remove</button>
             </div>
           </div>
-        `;
-      }).join('');
+        </div>`;
+      }).join('') + `<div style="display:flex;justify-content:space-between;margin-top:12px;font-weight:800;"><span>Total</span><span>$${total.toFixed(2)} (${count} items)</span></div>`;
     }
 
     function removeBagItem(idx) {
@@ -1627,92 +1658,50 @@
       updateBagUI();
     }
 
-    async function openAllBagStripeLinks() {
+    function changeQty(idx, delta) {
+      if (!bag[idx]) return;
+      bag[idx].quantity = (bag[idx].quantity || 1) + delta;
+      if (bag[idx].quantity <= 0) bag.splice(idx, 1);
+      saveBag();
+      renderBagItems();
+      updateBagUI();
+    }
+
+    async function openAllBagStripeLinks(btn) {
       if (bag.length === 0) return;
-      const checkoutBtn = document.querySelector('#bag-drawer-foot .btn-orange');
-      if (checkoutBtn) {
-        checkoutBtn.disabled = true;
-        checkoutBtn.textContent = 'Preparing checkout…';
-      }
-
-      const payloadItems = bag.map(it => ({
-        price: it.productId,
-        quantity: 1
-      }));
-
-      // 1. Try local server-side API proxy
-      let succeeded = false;
+      const grouped = {};
+      bag.forEach(it => { const pid = (typeof priceIdFor === 'function') ? priceIdFor(it.productId) : it.productId; grouped[pid] = (grouped[pid] || 0) + (it.quantity || 1); });
+      const stripeItems = Object.keys(grouped).map(id => ({ price: id, quantity: grouped[id] }));
+      const btnEl = btn || document.getElementById('checkout-btn');
+      const oldText = btnEl ? btnEl.innerHTML : '';
+      if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Loading...'; }
       try {
-        const response = await fetch('/api/checkout', {
+        showToast('Connecting to secure Stripe checkout...');
+        const res = await fetch(CHECKOUT_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: 'bag-checkout@cosresells.com',
-            items: bag.map(it => ({ productId: it.productId, colorway: it.colorway, size: it.size }))
-          })
+          body: JSON.stringify({ items: stripeItems })
         });
-        const data = await response.json();
-        if (data.url) {
-          bag = [];
-          saveBag();
-          window.location.href = data.url;
-          succeeded = true;
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data && typeof data.url === 'string' && data.url.indexOf('https://') === 0) {
+          showToast('Opening secure Stripe checkout...');
+          redirectToStripe(data.url);
           return;
         }
-      } catch (err) {
-        console.warn('Local proxy failed, trying backup API...', err);
-      }
-
-      // 2. Try the live verified backend URL directly
-      if (!succeeded) {
-        try {
-          const response = await fetch('https://3000-inifimsfe8k6f0492q3q4.e2b.app/api/checkout', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              email: 'bag-checkout@cosresells.com',
-              items: bag.map(it => ({ productId: it.productId, colorway: it.colorway, size: it.size }))
-            })
-          });
-          const data = await response.json();
-          if (data.url) {
-            bag = [];
-            saveBag();
-            window.location.href = data.url;
-            succeeded = true;
-            return;
-          }
-        } catch (err) {
-          console.warn('Backup API failed, trying direct webhook...', err);
-        }
-      }
-
-      // 3. Fallback: Direct webhook post
-      if (!succeeded) {
-        try {
-          const response = await fetch(CHECKOUT_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ items: payloadItems })
-          });
-          const data = await response.json();
-          if (data.url) {
-            bag = [];
-            saveBag();
-            window.location.href = data.url;
-            return;
-          }
-          alert(data.error || 'Checkout failed. Please try again.');
-        } catch (err) {
-          alert('Could not initialize Stripe checkout. Please try again or text us at 914-689-1796.');
-        } finally {
-          if (checkoutBtn) {
-            checkoutBtn.disabled = false;
-            checkoutBtn.textContent = 'Checkout All via Stripe ↗';
-          }
-        }
-      }
+        showToast((data && data.error) || 'Checkout failed. Please try again.');
+      } catch (e) { showToast('Could not reach checkout. Please check your connection and try again.'); }
+      if (btnEl) { btnEl.disabled = false; btnEl.innerHTML = oldText; }
     }
+
+    // After Stripe payment: clear cart and show a message
+    (function handleCheckoutReturn() {
+      try {
+        const s = new URLSearchParams(window.location.search).get('checkout');
+        if (s === 'success') { localStorage.removeItem('cosresells_gh_bag'); localStorage.removeItem('cart'); setTimeout(() => showToast('Thanks! Your order was placed.'), 300); }
+        if (s === 'cancelled') { setTimeout(() => showToast('Checkout cancelled - your cart is saved'), 300); }
+        if (s) history.replaceState(null, '', window.location.pathname);
+      } catch (e) {}
+    })();
 
     function saveBag() {
       try { localStorage.setItem('cosresells_gh_bag', JSON.stringify(bag)); } catch(e) {}
@@ -1720,59 +1709,75 @@
     }
 
     function updateBagUI() {
-      document.getElementById('header-bag-count').textContent = bag.length;
+      const n = bag.reduce((s, it) => s + (it.quantity || 1), 0);
+      const total = bag.reduce((s, it) => s + ((it.price || (PRODUCTS[it.productId] ? PRODUCTS[it.productId].price : 0)) * (it.quantity || 1)), 0);
+      document.getElementById('header-bag-count').textContent = n;
+      const cc = document.getElementById('cart-count');
+      if (cc) cc.textContent = n;
+      const cf = document.getElementById('cart-total-float');
+      if (cf) cf.textContent = '$' + total.toFixed(2);
     }
 
-    // Special Request Form → FormSubmit (AJAX POST directly to coslikesj@gmail.com)
-    (function setupSpecialRequestForm() {
-      const FORMSUBMIT_ENDPOINT = "https://formsubmit.co/ajax/coslikesj@gmail.com";
-      const form = document.getElementById('special-request-form');
+    // Special Request -> Formspree (AJAX). Formspree emails each request to the form owner;
+    // the customer's `email` field becomes the reply-to address.
+    async function handleSpecialRequestSubmit(e) {
+      e.preventDefault();
+      const form = e.target;
       const btn = document.getElementById('req-submit-btn');
+      btn.disabled = true;
+      btn.textContent = 'Sending request...';
+
+      const v = (n) => (form.elements[n] ? form.elements[n].value.trim() : '');
+      const refCode = 'REQ-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+      const payload = {
+        _subject: '[cosresells Special Request ' + refCode + '] ' + v('product_requested') + ' (' + v('specific_size') + ')',
+        reference_id: refCode,
+        email: v('email'),
+        phone: v('phone') || 'Not provided',
+        product_requested: v('product_requested'),
+        category: v('category'),
+        fit_preference: v('fit_preference'),
+        colorway: v('colorway'),
+        specific_size: v('specific_size'),
+        notes: v('notes') || 'None'
+      };
+
+      const summary = 'Product: ' + payload.product_requested + '\nColorway: ' + payload.colorway +
+        '\nSize: ' + payload.specific_size + '\nCategory: ' + payload.category + '\nFit: ' + payload.fit_preference +
+        '\nEmail: ' + payload.email + '\nPhone: ' + payload.phone + '\nNotes: ' + payload.notes + '\nRef: ' + refCode;
+      const mailtoUrl = 'mailto:coslikesj@gmail.com?subject=' + encodeURIComponent(payload._subject) + '&body=' + encodeURIComponent('Hi cosresells,\n\n' + summary + '\n');
+      const smsUrl = 'sms:+19146891796?body=' + encodeURIComponent('Hi cosresells! Special request ' + refCode + ': ' + payload.product_requested + ', ' + payload.colorway + ', size ' + payload.specific_size + '. My email: ' + payload.email);
+
       const statusBox = document.getElementById('request-status-box');
-      const errorBox = document.getElementById('request-error-box');
-      if (!form) return;
+      const statusMsg = document.getElementById('request-status-msg');
+      document.getElementById('req-mailto-btn').href = mailtoUrl;
+      document.getElementById('req-sms-btn').href = smsUrl;
 
-      form.addEventListener('submit', async function(e) {
-        e.preventDefault();
-        if (statusBox) statusBox.style.display = 'none';
-        if (errorBox) errorBox.style.display = 'none';
-        if (btn) { btn.disabled = true; btn.textContent = 'Sending to cosresells…'; }
+      let ok = false;
+      let errorText = '';
+      try {
+        const res = await fetch('https://formsubmit.co/ajax/coslikesj@gmail.com', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const json = await res.json().catch(() => ({}));
+        ok = res.ok && json.success !== 'false' && json.success !== false;
+        if (!ok) errorText = (typeof json.message === 'string' && json.message) ? json.message : '';
+      } catch (err) { ok = false; }
 
-        const data = new FormData(form);
-        const payload = Object.fromEntries(data);
-
-        try {
-          const response = await fetch(FORMSUBMIT_ENDPOINT, {
-            method: 'POST',
-            headers: { 
-              'Content-Type': 'application/json',
-              'Accept': 'application/json' 
-            },
-            body: JSON.stringify(payload)
-          });
-
-          const resData = await response.json();
-
-          if (response.ok && (resData.success === "true" || resData.success === true)) {
-            form.reset();
-            if (statusBox) statusBox.style.display = 'block';
-            showToast('Special request sent successfully via FormSubmit!');
-            setTimeout(function() {
-              statusBox && statusBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }, 150);
-          } else {
-            if (errorBox) errorBox.style.display = 'block';
-            showToast('Could not send request. FormSubmit activation may be pending.');
-          }
-        } catch (err) {
-          console.warn('FormSubmit submission error:', err);
-          if (errorBox) errorBox.style.display = 'block';
-          showToast('Could not send request. Please email coslikesj@gmail.com.');
-        } finally {
-          if (btn) { btn.disabled = false; btn.textContent = 'Send Special Request ↗'; }
-        }
-      });
-    })();
+      if (ok) {
+        statusMsg.textContent = 'Your request (' + refCode + ') was sent to cosresells. We will contact you at ' + payload.email + '.';
+        showToast('Special request sent! Ref: ' + refCode);
+        form.reset();
+      } else {
+        statusMsg.textContent = (errorText || 'We could not send your request automatically.') + ' Tap "Send from Email App" or text us below so it still reaches cosresells (' + refCode + ').';
+        showToast('Request not sent yet - use the email or text button below.');
+      }
+      statusBox.style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = 'Send Special Request Directly ↗';
+    }
 
     function toggleFaq(btn) {
       const item = btn.parentElement;
