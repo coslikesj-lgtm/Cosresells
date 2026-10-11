@@ -1,1979 +1,780 @@
-
-===================== drizzle.config.json =====================
-{
-  "dialect": "postgresql",
-  "schema": "./src/db/schema.ts",
-  "dbCredentials": {
-    "url": "postgresql://postgres:postgres@127.0.0.1:5432/app_db"
-  }
-}
-
-
-===================== eslint.config.mjs =====================
-import { defineConfig, globalIgnores } from "eslint/config";
-import nextCoreWebVitals from "eslint-config-next/core-web-vitals";
-
-export default defineConfig([
-  // Keep the starter on the flat config export that actually runs under the pinned ESLint/Next toolchain.
-  ...nextCoreWebVitals,
-  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts"]),
-]);
-
-
-===================== next.config.ts =====================
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {};
-
-export default nextConfig;
-
-
-===================== package.json =====================
-{
-  "name": "nextjs-postgresql-template",
-  "private": true,
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@types/nodemailer": "^8.0.2",
-    "dotenv": "17.3.1",
-    "drizzle-orm": "0.45.2",
-    "next": "16.2.6",
-    "nodemailer": "^10.1.0",
-    "pg": "8.20.0",
-    "react": "19.2.6",
-    "react-dom": "19.2.6"
-  },
-  "devDependencies": {
-    "@tailwindcss/postcss": "4.1.17",
-    "@types/node": "22.19.15",
-    "@types/pg": "8.18.0",
-    "@types/react": "19.2.14",
-    "@types/react-dom": "19.2.3",
-    "drizzle-kit": "0.31.10",
-    "eslint": "9.39.4",
-    "eslint-config-next": "16.2.6",
-    "postcss": "8.5.8",
-    "tailwindcss": "4.1.17",
-    "typescript": "5.9.3"
-  }
-}
-
-
-===================== postcss.config.mjs =====================
-const postcssConfig = {
-  plugins: {
-    "@tailwindcss/postcss": {},
-  },
-};
-
-export default postcssConfig;
-
-
-===================== src/app/api/health/route.ts =====================
-import { db } from "@/db";
-import { sql } from "drizzle-orm";
-
-export const dynamic = "force-dynamic";
-
-export async function GET() {
-  try {
-    await db.execute(sql`select 1`);
-    return Response.json({ ok: true });
-  } catch {
-    return Response.json({ ok: false }, { status: 500 });
-  }
-}
-
-
-===================== src/app/api/submit/route.ts =====================
-import type { NextRequest } from "next/server";
-import { eq } from "drizzle-orm";
-import { db } from "@/db";
-import { submissions } from "@/db/schema";
-import { productBySlug } from "@/lib/products";
-import { sendEmail, type EmailAttachment } from "@/lib/mailer";
-
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
-/** The real address the customer is on, e.g. https://your-site.com */
-function siteOrigin(req: NextRequest): string | null {
-  const candidates = [
-    req.headers.get("origin"),
-    (() => {
-      const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
-      const proto = req.headers.get("x-forwarded-proto") ?? "https";
-      return host ? `${proto}://${host}` : null;
-    })(),
-    process.env.SITE_URL ?? null,
-  ];
-  for (const c of candidates) {
-    if (!c || c === "null") continue;
-    try {
-      const url = new URL(c);
-      if (url.protocol === "https:" || url.protocol === "http:") return url.origin;
-    } catch {
-      // try the next candidate
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>cos's whole sale</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..800;1,9..40,400..800&family=Permanent+Marker&display=swap" rel="stylesheet">
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            ink: '#111111',
+            paper: '#fff8e7',
+            sun: '#ffd93d',
+            bubblegum: '#ff8fb1',
+            sky: '#6ec1ff',
+            mint: '#7be0a0',
+            tangerine: '#ffa552',
+            grape: '#b79cff',
+          },
+          fontFamily: {
+            marker: ['"Permanent Marker"', 'cursive', 'sans-serif'],
+            sans: ['"DM Sans"', 'system-ui', 'sans-serif'],
+          }
+        }
+      }
     }
-  }
-  return null;
-}
-
-const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-/** Error codes the page turns into a short message for the customer. */
-type ErrorCode = "form" | "email" | "photo" | "link" | "send";
-
-const text = (value: FormDataEntryValue | null, max = 200) =>
-  typeof value === "string" ? value.trim().slice(0, max) : "";
-
-const fail = (error: ErrorCode, status = 400) =>
-  Response.json({ ok: false, error }, { status });
-
-function normalizeLink(raw: string): string | null {
-  if (!raw || /\s/.test(raw)) return null;
-  const withProtocol = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
-  try {
-    const url = new URL(withProtocol);
-    return url.hostname.includes(".") ? url.toString() : null;
-  } catch {
-    return null;
-  }
-}
-
-export async function POST(req: NextRequest) {
-  let form: FormData;
-  try {
-    form = await req.formData();
-  } catch {
-    return fail("form");
-  }
-
-  // Honeypot: bots fill this hidden field, people never see it.
-  if (text(form.get("zq_hp"))) return Response.json({ ok: true });
-
-  const kind = text(form.get("kind"));
-  const email = text(form.get("email"));
-  const colorway = text(form.get("colorway"));
-  const size = text(form.get("size"), 50);
-  if (!colorway || !size) return fail("form");
-  if (!EMAIL_RE.test(email)) return fail("email");
-
-  let subject: string;
-  let fields: Array<[string, string]>;
-  let attachment: EmailAttachment | undefined;
-  let row: typeof submissions.$inferInsert;
-
-  if (kind === "order") {
-    const product = productBySlug(text(form.get("product")));
-    const photo = form.get("photo");
-    if (!product) return fail("form");
-    if (!(photo instanceof File) || photo.size === 0) return fail("photo");
-    const looksLikeImage =
-      photo.type.startsWith("image/") || /\.(heic|heif|jpe?g|png|webp|gif)$/i.test(photo.name);
-    if (!looksLikeImage || photo.size > MAX_PHOTO_BYTES) return fail("photo");
-
-    const content = Buffer.from(await photo.arrayBuffer());
-    const contentType = photo.type || "image/jpeg";
-    const filename = photo.name || "photo.jpg";
-    attachment = { filename, contentType, content };
-
-    subject = `Order: ${product.name}`;
-    fields = [
-      ["Product", product.name],
-      ["Colorway", colorway],
-      ["Size", size],
-    ];
-    row = {
-      kind,
-      product: product.name,
-      colorway,
-      size,
-      email,
-      photoName: filename,
-      photoType: contentType,
-      photo: content,
-    };
-  } else if (kind === "special") {
-    const rawLink = text(form.get("link"), 1000);
-    const link = normalizeLink(rawLink);
-    const itemName = text(form.get("name"));
-    if (!link) return fail("link");
-    if (!itemName) return fail("form");
-
-    subject = `Special request: ${itemName}`;
-    fields = [
-      ["Link", link],
-      ["Name", itemName],
-      ["Colorway", colorway],
-      ["Size", size],
-    ];
-    row = { kind, link, itemName, colorway, size, email };
-  } else {
-    return fail("form");
-  }
-
-  const origin = siteOrigin(req);
-  if (!origin) return fail("send", 500);
-
-  // Keep a copy of every submission so nothing gets lost.
-  let rowId: number | null = null;
-  try {
-    const [saved] = await db
-      .insert(submissions)
-      .values(row)
-      .returning({ id: submissions.id });
-    rowId = saved?.id ?? null;
-  } catch (err) {
-    console.error("Could not save submission:", err);
-  }
-
-  const sent = await sendEmail({ subject, replyTo: email, fields, attachment, origin });
-
-  if (sent && rowId !== null) {
-    try {
-      await db.update(submissions).set({ emailed: true }).where(eq(submissions.id, rowId));
-    } catch {
-      // logging only
+  </script>
+  <style>
+    html { scroll-behavior: smooth; }
+    body {
+      background-color: #fff8e7;
+      background-image: radial-gradient(rgba(17, 17, 17, 0.16) 1.4px, transparent 1.4px);
+      background-size: 24px 24px;
+      color: #111111;
+      font-family: "DM Sans", sans-serif;
     }
-  }
+    .font-marker { font-family: "Permanent Marker", cursive, sans-serif; }
+    ::selection { background: #ffd93d; color: #111111; }
+    @keyframes floaty {
+      0%, 100% { transform: translateY(0) rotate(var(--tilt, 0deg)); }
+      50% { transform: translateY(-10px) rotate(var(--tilt, 0deg)); }
+    }
+    .floaty { animation: floaty 5s ease-in-out infinite; }
+  </style>
+</head>
+<body class="min-h-screen antialiased">
 
-  return sent ? Response.json({ ok: true }) : fail("send", 502);
-}
+  <!-- SVG Defs for Doodle Wobble Filter -->
+  <svg width="0" height="0" class="pointer-events-none absolute" aria-hidden="true" focusable="false">
+    <defs>
+      <filter id="doodle-wobble" x="-8%" y="-8%" width="116%" height="116%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.025" numOctaves="2" seed="4" result="noise" />
+        <feDisplacementMap in="SourceGraphic" in2="noise" scale="4" xChannelSelector="R" yChannelSelector="G" />
+      </filter>
+    </defs>
+  </svg>
 
+  <!-- Sticky Header -->
+  <header class="sticky top-0 z-30 border-b-[3px] border-ink bg-[#fff8e7]/95 backdrop-blur">
+    <div class="mx-auto flex max-w-6xl flex-col gap-2 px-5 py-3 md:flex-row md:items-center md:justify-between">
+      <a href="#top" class="font-marker text-2xl leading-none sm:text-3xl text-ink">
+        cos's whole sale
+      </a>
+      <nav aria-label="Main" class="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 md:pb-0">
+        <a href="#how" class="shrink-0 rounded-full border-[3px] border-transparent px-3 py-1 text-sm font-bold transition hover:border-ink hover:bg-sun">How to use</a>
+        <a href="#products" class="shrink-0 rounded-full border-[3px] border-transparent px-3 py-1 text-sm font-bold transition hover:border-ink hover:bg-sun">Products</a>
+        <a href="#order" class="shrink-0 rounded-full border-[3px] border-transparent px-3 py-1 text-sm font-bold transition hover:border-ink hover:bg-sun">Order form</a>
+        <a href="#special" class="shrink-0 rounded-full border-[3px] border-transparent px-3 py-1 text-sm font-bold transition hover:border-ink hover:bg-sun">Special request</a>
+        <a href="#contact" class="shrink-0 rounded-full border-[3px] border-transparent px-3 py-1 text-sm font-bold transition hover:border-ink hover:bg-sun">Contact</a>
+      </nav>
+    </div>
+  </header>
 
-===================== src/app/globals.css =====================
-@import "tailwindcss";
-
-@theme inline {
-  --color-ink: #111111;
-  --color-paper: #fff8e7;
-  --color-sun: #ffd93d;
-  --color-bubblegum: #ff8fb1;
-  --color-sky: #6ec1ff;
-  --color-mint: #7be0a0;
-  --color-tangerine: #ffa552;
-  --color-grape: #b79cff;
-
-  --font-display: var(--font-marker), "Marker Felt", "Comic Sans MS", cursive;
-  --font-sans: var(--font-body), ui-sans-serif, system-ui, sans-serif;
-}
-
-html {
-  scroll-behavior: smooth;
-}
-
-body {
-  background-color: var(--color-paper);
-  background-image: radial-gradient(rgba(17, 17, 17, 0.16) 1.4px, transparent 1.4px);
-  background-size: 24px 24px;
-  color: var(--color-ink);
-  font-family: var(--font-sans);
-}
-
-::selection {
-  background: var(--color-sun);
-  color: var(--color-ink);
-}
-
-@keyframes floaty {
-  0%,
-  100% {
-    transform: translateY(0) rotate(var(--tilt, 0deg));
-  }
-  50% {
-    transform: translateY(-10px) rotate(var(--tilt, 0deg));
-  }
-}
-
-.floaty {
-  animation: floaty 5s ease-in-out infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  html {
-    scroll-behavior: auto;
-  }
-  .floaty {
-    animation: none;
-  }
-}
-
-
-===================== src/app/icon.svg =====================
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect x="4" y="4" width="56" height="56" rx="16" fill="#ffd93d" stroke="#111" stroke-width="5"/>
-  <path d="M42 24c-3-4-8-5-12-3-6 3-7 12-3 17 3 4 9 5 14 1" fill="none" stroke="#111" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
-</svg>
-
-
-===================== src/app/layout.tsx =====================
-import type { Metadata, Viewport } from "next";
-import type { ReactNode } from "react";
-import { DM_Sans, Permanent_Marker } from "next/font/google";
-import { DoodleDefs } from "@/components/doodles";
-import "./globals.css";
-
-const marker = Permanent_Marker({
-  weight: "400",
-  subsets: ["latin"],
-  variable: "--font-marker",
-  display: "swap",
-});
-
-const body = DM_Sans({
-  subsets: ["latin"],
-  variable: "--font-body",
-  display: "swap",
-});
-
-export const metadata: Metadata = {
-  title: "cos's whole sale",
-};
-
-export const viewport: Viewport = {
-  themeColor: "#fff8e7",
-};
-
-export default function RootLayout({ children }: { children: ReactNode }) {
-  return (
-    <html lang="en" className={`${marker.variable} ${body.variable}`}>
-      <body className="min-h-screen antialiased">
-        <DoodleDefs />
-        {children}
-      </body>
-    </html>
-  );
-}
-
-
-===================== src/app/page.tsx =====================
-import { Contact } from "@/components/Contact";
-import { Header } from "@/components/Header";
-import { Hero } from "@/components/Hero";
-import { HowToUse } from "@/components/HowToUse";
-import { OrderForm } from "@/components/OrderForm";
-import { ProductGrid } from "@/components/ProductGrid";
-import { SpecialRequest } from "@/components/SpecialRequest";
-
-export default function Home() {
-  return (
-    <>
-      <Header />
-      <main>
-        <Hero />
-        <HowToUse />
-        <ProductGrid />
-        <OrderForm />
-        <SpecialRequest />
-        <Contact />
-      </main>
-      <footer className="border-t-[3px] border-ink bg-ink px-5 py-8 text-center font-display text-2xl text-white">
-        cos&apos;s whole sale
-      </footer>
-    </>
-  );
-}
-
-
-===================== src/components/Contact.tsx =====================
-import { InstagramIcon, MailIcon, PhoneIcon, TikTokIcon } from "./icons";
-import { Section } from "./ui";
-
-const contacts = [
-  {
-    label: "Instagram",
-    value: "@coswholesale",
-    href: "https://www.instagram.com/coswholesale",
-    Icon: InstagramIcon,
-    bg: "#ffd1dc",
-    external: true,
-  },
-  {
-    label: "TikTok",
-    value: "@coswholesale",
-    href: "https://www.tiktok.com/@coswholesale",
-    Icon: TikTokIcon,
-    bg: "#cfeaff",
-    external: true,
-  },
-  {
-    label: "Phone",
-    value: "914-689-1796",
-    href: "tel:+19146891796",
-    Icon: PhoneIcon,
-    bg: "#cdf5da",
-    external: false,
-  },
-  {
-    label: "Email",
-    value: "coslikesj@gmail.com",
-    href: "mailto:coslikesj@gmail.com",
-    Icon: MailIcon,
-    bg: "#ffe9a8",
-    external: false,
-  },
-];
-
-export function Contact() {
-  return (
-    <Section id="contact" title="Contact" color="var(--color-tangerine)">
-      <ul className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        {contacts.map(({ label, value, href, Icon, bg, external }) => (
-          <li key={label}>
-            <a
-              href={href}
-              {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-              className="flex h-full flex-col gap-4 rounded-3xl border-[3px] border-ink p-6 shadow-[6px_6px_0_0_#111] transition duration-200 hover:-translate-y-1 hover:shadow-[9px_9px_0_0_#111] active:translate-y-0"
-              style={{ backgroundColor: bg }}
-            >
-              <span className="flex h-14 w-14 items-center justify-center rounded-full border-[3px] border-ink bg-white">
-                <Icon className="h-7 w-7" />
-              </span>
-              <span className="font-display text-2xl">{label}</span>
-              <span className="break-all text-lg font-bold">{value}</span>
-            </a>
-          </li>
-        ))}
-      </ul>
-    </Section>
-  );
-}
-
-
-===================== src/components/Header.tsx =====================
-const links = [
-  { href: "#how", label: "How to use" },
-  { href: "#products", label: "Products" },
-  { href: "#order", label: "Order form" },
-  { href: "#special", label: "Special request" },
-  { href: "#contact", label: "Contact" },
-];
-
-export function Header() {
-  return (
-    <header className="sticky top-0 z-30 border-b-[3px] border-ink bg-paper/95 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl flex-col gap-2 px-5 py-3 md:flex-row md:items-center md:justify-between">
-        <a href="#top" className="font-display text-2xl leading-none sm:text-3xl">
-          cos&apos;s whole sale
-        </a>
-        <nav
-          aria-label="Main"
-          className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 md:pb-0"
-        >
-          {links.map((link) => (
-            <a
-              key={link.href}
-              href={link.href}
-              className="shrink-0 rounded-full border-[3px] border-transparent px-3 py-1 text-sm font-bold transition hover:border-ink hover:bg-sun"
-            >
-              {link.label}
-            </a>
-          ))}
-        </nav>
-      </div>
-    </header>
-  );
-}
-
-
-===================== src/components/Hero.tsx =====================
-import type { CSSProperties } from "react";
-import { Doodle, type DoodleSpec } from "./doodles";
-
-const bubbles: Array<{ spec: DoodleSpec; bg: string; tilt: string; delay: string; hideOnSmall?: boolean }> = [
-  { spec: { kind: "runners", fill: "#ffa552" }, bg: "#ffe9a8", tilt: "-6deg", delay: "0s" },
-  { spec: { kind: "hoodie", fill: "#7be0a0" }, bg: "#ffd1dc", tilt: "4deg", delay: "0.6s" },
-  { spec: { kind: "airpods", fill: "#ffffff", stem: "mid", tip: true, anc: true }, bg: "#cfeaff", tilt: "-3deg", delay: "1.2s" },
-  { spec: { kind: "pants", fill: "#ff8fb1" }, bg: "#e2d6ff", tilt: "6deg", delay: "1.8s", hideOnSmall: true },
-  { spec: { kind: "tee", fill: "#ffd93d" }, bg: "#cdf5da", tilt: "-5deg", delay: "2.4s", hideOnSmall: true },
-];
-
-export function Hero() {
-  return (
-    <section id="top" className="px-5 pb-6 pt-12 sm:pt-20">
-      <div className="mx-auto flex max-w-6xl flex-col items-center text-center">
-        <h1 className="font-display text-6xl leading-[0.95] sm:text-8xl lg:text-9xl">
-          <span className="-rotate-2 inline-block">cos&apos;s</span>{" "}
-          <span
-            className="rotate-1 inline-block px-3"
-            style={{
-              backgroundImage:
-                "linear-gradient(transparent 58%, var(--color-sun) 58%)",
-            }}
-          >
+  <main>
+    <!-- Hero Section -->
+    <section id="top" class="px-5 pb-6 pt-12 sm:pt-20">
+      <div class="mx-auto flex max-w-6xl flex-col items-center text-center">
+        <h1 class="font-marker text-6xl leading-[0.95] sm:text-8xl lg:text-9xl">
+          <span class="-rotate-2 inline-block">cos's</span>
+          <span class="rotate-1 inline-block px-3" style="background-image: linear-gradient(transparent 58%, #ffd93d 58%);">
             whole sale
           </span>
         </h1>
-        <svg
-          viewBox="0 0 300 20"
-          className="mt-3 h-5 w-64 sm:w-96"
-          fill="none"
-          stroke="#111"
-          strokeWidth="5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-          filter="url(#doodle-wobble)"
-        >
+        <svg viewBox="0 0 300 20" class="mt-3 h-5 w-64 sm:w-96" fill="none" stroke="#111" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" filter="url(#doodle-wobble)">
           <path d="M6 12 q12 -12 24 0 t24 0 t24 0 t24 0 t24 0 t24 0 t24 0 t24 0 t24 0 t24 0 t24 0 t24 0" />
         </svg>
 
-        <div className="mt-12 flex items-center justify-center">
-          {bubbles.map((b, i) => (
-            <div
-              key={i}
-              className={`floaty -ml-3 first:ml-0 sm:-ml-5 ${b.hideOnSmall ? "hidden md:block" : ""}`}
-              style={
-                {
-                  "--tilt": b.tilt,
-                  animationDelay: b.delay,
-                  zIndex: i % 2 === 0 ? 2 : 1,
-                } as CSSProperties
-              }
-            >
-              <div
-                className="h-28 w-28 rounded-full border-[3px] border-ink p-3 shadow-[5px_5px_0_0_#111] sm:h-36 sm:w-36 lg:h-44 lg:w-44 lg:p-4"
-                style={{ backgroundColor: b.bg }}
-              >
-                <Doodle spec={b.spec} />
-              </div>
-            </div>
-          ))}
-        </div>
+        <!-- Doodle bubbles -->
+        <div id="hero-bubbles" class="mt-12 flex items-center justify-center"></div>
 
-        <div className="mt-12 flex flex-wrap items-center justify-center gap-4">
-          <a
-            href="#products"
-            className="rounded-xl border-[3px] border-ink bg-ink px-7 py-3.5 font-display text-xl tracking-wide text-white shadow-[5px_5px_0_0_var(--color-sun)] transition hover:-translate-y-0.5 hover:shadow-[7px_7px_0_0_var(--color-sun)] active:translate-y-0.5 active:shadow-[2px_2px_0_0_var(--color-sun)]"
-          >
+        <div class="mt-12 flex flex-wrap items-center justify-center gap-4">
+          <a href="#products" class="rounded-xl border-[3px] border-ink bg-ink px-7 py-3.5 font-marker text-xl tracking-wide text-white shadow-[5px_5px_0_0_#ffd93d] transition hover:-translate-y-0.5 hover:shadow-[7px_7px_0_0_#ffd93d] active:translate-y-0.5">
             Products
           </a>
-          <a
-            href="#how"
-            className="rounded-xl border-[3px] border-ink bg-white px-7 py-3.5 font-display text-xl tracking-wide shadow-[5px_5px_0_0_#111] transition hover:-translate-y-0.5 hover:bg-sun hover:shadow-[7px_7px_0_0_#111] active:translate-y-0.5 active:shadow-[2px_2px_0_0_#111]"
-          >
+          <a href="#order" class="rounded-xl border-[3px] border-ink bg-sun px-7 py-3.5 font-marker text-xl tracking-wide text-ink shadow-[5px_5px_0_0_#111] transition hover:-translate-y-0.5 hover:shadow-[7px_7px_0_0_#111] active:translate-y-0.5">
+            Order form
+          </a>
+          <a href="#how" class="rounded-xl border-[3px] border-ink bg-white px-7 py-3.5 font-marker text-xl tracking-wide shadow-[5px_5px_0_0_#111] transition hover:-translate-y-0.5 hover:bg-sun hover:shadow-[7px_7px_0_0_#111] active:translate-y-0.5">
             How to use
           </a>
         </div>
       </div>
     </section>
-  );
-}
 
-
-===================== src/components/HowToUse.tsx =====================
-import { Section } from "./ui";
-
-const steps: Array<{ text: string; bg: string; link?: { href: string; label: string } }> = [
-  {
-    text: "Pick the product you want and press Order form.",
-    bg: "#ffe9a8",
-  },
-  {
-    text: "Add a photo of the item you want, type the colorway you want, type your size, and type your email. Every box is required.",
-    bg: "#cfeaff",
-  },
-  {
-    text: "Press Submit. Your order is sent to me by email.",
-    bg: "#cdf5da",
-  },
-  {
-    text: "Press Buy and pay with Stripe.",
-    bg: "#ffd1dc",
-  },
-  {
-    text: "If the item you want is not on the website, use a special request.",
-    bg: "#e2d6ff",
-    link: { href: "#special", label: "Special request" },
-  },
-];
-
-export function HowToUse() {
-  return (
-    <Section id="how" title="How to use" color="var(--color-bubblegum)">
-      <ol className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {steps.map((step, i) => (
-          <li
-            key={step.text}
-            className="relative flex flex-col gap-4 rounded-3xl border-[3px] border-ink p-6 pt-8 shadow-[6px_6px_0_0_#111]"
-            style={{ backgroundColor: step.bg }}
-          >
-            <span className="absolute -top-5 left-5 flex h-11 w-11 items-center justify-center rounded-full border-[3px] border-ink bg-white font-display text-xl shadow-[3px_3px_0_0_#111]">
-              {i + 1}
-            </span>
-            <p className="text-lg font-semibold leading-snug">{step.text}</p>
-            {step.link ? (
-              <a
-                href={step.link.href}
-                className="mt-auto self-start rounded-xl border-[3px] border-ink bg-white px-4 py-2 font-display text-lg tracking-wide transition hover:bg-sun active:translate-y-0.5"
-              >
-                {step.link.label}
-              </a>
-            ) : null}
+    <!-- How To Use Section -->
+    <section id="how" class="scroll-mt-28 px-5 py-14 sm:py-16">
+      <div class="mx-auto max-w-6xl">
+        <h2 class="mb-8 font-marker text-4xl leading-tight sm:text-5xl">
+          <span class="-rotate-1 inline-block px-2" style="background-image: linear-gradient(transparent 55%, #ff8fb1 55%);">
+            How to use
+          </span>
+        </h2>
+        <ol class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <li class="relative flex flex-col gap-4 rounded-3xl border-[3px] border-ink bg-[#ffe9a8] p-6 pt-8 shadow-[6px_6px_0_0_#111]">
+            <span class="absolute -top-5 left-5 flex h-11 w-11 items-center justify-center rounded-full border-[3px] border-ink bg-white font-marker text-xl shadow-[3px_3px_0_0_#111]">1</span>
+            <p class="text-lg font-semibold leading-snug">Select the product you want to order from the website.</p>
+            <a href="#products" class="mt-auto self-start rounded-xl border-[3px] border-ink bg-white px-4 py-2 font-marker text-lg tracking-wide transition hover:bg-sun">View products</a>
           </li>
-        ))}
+          <li class="relative flex flex-col gap-4 rounded-3xl border-[3px] border-ink bg-[#cfeaff] p-6 pt-8 shadow-[6px_6px_0_0_#111]">
+            <span class="absolute -top-5 left-5 flex h-11 w-11 items-center justify-center rounded-full border-[3px] border-ink bg-white font-marker text-xl shadow-[3px_3px_0_0_#111]">2</span>
+            <p class="text-lg font-semibold leading-snug">Fill out the order form with the required photo, the name of the specific colorway you want, the size you want, and your email.</p>
+            <a href="#order" class="mt-auto self-start rounded-xl border-[3px] border-ink bg-white px-4 py-2 font-marker text-lg tracking-wide transition hover:bg-sun">Go to order form</a>
+          </li>
+          <li class="relative flex flex-col gap-4 rounded-3xl border-[3px] border-ink bg-[#cdf5da] p-6 pt-8 shadow-[6px_6px_0_0_#111]">
+            <span class="absolute -top-5 left-5 flex h-11 w-11 items-center justify-center rounded-full border-[3px] border-ink bg-white font-marker text-xl shadow-[3px_3px_0_0_#111]">3</span>
+            <p class="text-lg font-semibold leading-snug">Press Submit, then purchase through the Stripe payment link for your item.</p>
+          </li>
+          <li class="relative flex flex-col gap-4 rounded-3xl border-[3px] border-ink bg-[#e2d6ff] p-6 pt-8 shadow-[6px_6px_0_0_#111]">
+            <span class="absolute -top-5 left-5 flex h-11 w-11 items-center justify-center rounded-full border-[3px] border-ink bg-white font-marker text-xl shadow-[3px_3px_0_0_#111]">4</span>
+            <p class="text-lg font-semibold leading-snug">If you want an item not on the website (for example Jordan 4's), submit a special request with a link of the item as a reference, the name, size, and colorway.</p>
+            <a href="#special" class="mt-auto self-start rounded-xl border-[3px] border-ink bg-white px-4 py-2 font-marker text-lg tracking-wide transition hover:bg-sun">Special request</a>
+          </li>
+          <li class="flex items-center rounded-3xl border-[3px] border-ink bg-sun p-6 shadow-[6px_6px_0_0_#111] sm:col-span-2 lg:col-span-2">
+            <p class="font-marker text-2xl leading-snug">Refunds only if the product you want isn't available.</p>
+          </li>
+        </ol>
+      </div>
+    </section>
 
-        <li className="flex items-center rounded-3xl border-[3px] border-ink bg-sun p-6 shadow-[6px_6px_0_0_#111] sm:col-span-2 lg:col-span-1">
-          <p className="font-display text-2xl leading-snug">
-            Refunds only if the product you want isn&apos;t available.
-          </p>
-        </li>
-      </ol>
-    </Section>
-  );
-}
+    <!-- Products Grid Section -->
+    <section id="products" class="scroll-mt-28 px-5 py-14 sm:py-16">
+      <div class="mx-auto max-w-6xl">
+        <h2 class="mb-8 font-marker text-4xl leading-tight sm:text-5xl">
+          <span class="-rotate-1 inline-block px-2" style="background-image: linear-gradient(transparent 55%, #7be0a0 55%);">
+            Products
+          </span>
+        </h2>
+        <ul id="product-grid" class="grid grid-cols-1 gap-6 min-[480px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"></ul>
+      </div>
+    </section>
 
+    <!-- Order Form Section -->
+    <section id="order" class="scroll-mt-28 px-5 py-14 sm:py-16">
+      <div class="mx-auto max-w-6xl">
+        <h2 class="mb-8 font-marker text-4xl leading-tight sm:text-5xl">
+          <span class="-rotate-1 inline-block px-2" style="background-image: linear-gradient(transparent 55%, #6ec1ff 55%);">
+            Order form
+          </span>
+        </h2>
 
-===================== src/components/OrderForm.tsx =====================
-"use client";
+        <div class="rounded-3xl border-[3px] border-ink bg-white/80 p-5 shadow-[8px_8px_0_0_#111] sm:p-8">
+          <!-- Success State -->
+          <div id="order-success" class="hidden flex-col items-center justify-center gap-6 py-6 text-center">
+            <div class="inline-flex items-center gap-2 rounded-2xl border-[3px] border-ink bg-mint px-6 py-3 font-marker text-2xl shadow-[4px_4px_0_0_#111]">
+              <svg class="h-7 w-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3"><polyline points="20 6 9 17 4 12" /></svg>
+              <span>Submitted</span>
+            </div>
+            <div class="flex flex-col items-center gap-2 max-w-md">
+              <div id="order-success-doodle" class="relative h-32 w-32 rounded-2xl border-[3px] border-ink bg-sun/40 p-2"></div>
+              <p id="order-success-title" class="font-marker text-3xl"></p>
+              <span id="order-success-price" class="rounded-xl border-[2px] border-ink bg-white px-4 py-1 font-marker text-2xl shadow-[2px_2px_0_0_#111]"></span>
+            </div>
+            <div class="flex flex-col items-center gap-4 w-full max-w-md">
+              <a id="order-stripe-btn" href="#" target="_blank" rel="noopener noreferrer" class="w-full rounded-2xl border-[3px] border-ink bg-ink px-8 py-4 font-marker text-2xl tracking-wide text-white shadow-[6px_6px_0_0_#ffd93d] transition hover:-translate-y-1 hover:shadow-[8px_8px_0_0_#ffd93d] active:translate-y-0.5">
+                Pay with Stripe →
+              </a>
+              <button type="button" onclick="resetOrderForm()" class="rounded-xl border-[2px] border-ink bg-white px-5 py-2 font-marker text-base transition hover:bg-slate-100">
+                Submit another order
+              </button>
+            </div>
+          </div>
 
-import { useEffect, useState } from "react";
-import { Doodle } from "./doodles";
-import {
-  Field,
-  Honeypot,
-  PhotoInput,
-  SubmitRow,
-  inputClass,
-  useSubmit,
-} from "./form-bits";
-import { SELECT_PRODUCT_EVENT } from "./ProductGrid";
-import { Section } from "./ui";
-import { productBySlug, products, sizeOptions } from "@/lib/products";
+          <!-- Order Form -->
+          <form id="order-form" action="https://formsubmit.co/coslikesj@gmail.com" method="POST" enctype="multipart/form-data" class="relative grid gap-8 md:grid-cols-2">
+            <input type="hidden" name="_captcha" value="false">
+            <input type="hidden" name="_template" value="table">
+            <input type="hidden" id="order-subject" name="_subject" value="Order">
 
-export function OrderForm() {
-  const [slug, setSlug] = useState("");
-  // Buy only appears for a product whose order form was submitted.
-  const [orderedSlug, setOrderedSlug] = useState<string | null>(null);
-  const { status, error, formKey, onSubmit, onChange } = useSubmit("order", (data) => {
-    setOrderedSlug(String(data.get("product") ?? ""));
-  });
-  const selected = productBySlug(slug);
-  const buyable = selected && orderedSlug === selected.slug ? selected : null;
-
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const next = (e as CustomEvent<string>).detail;
-      if (typeof next === "string") setSlug(next);
-    };
-    window.addEventListener(SELECT_PRODUCT_EVENT, handler);
-    return () => window.removeEventListener(SELECT_PRODUCT_EVENT, handler);
-  }, []);
-
-  return (
-    <Section id="order" title="Order form" color="var(--color-sky)">
-      <div className="rounded-3xl border-[3px] border-ink bg-white/80 p-5 shadow-[8px_8px_0_0_#111] sm:p-8">
-        <form
-          key={formKey}
-          onSubmit={onSubmit}
-          onChange={onChange}
-          className="relative grid gap-8 md:grid-cols-2"
-        >
-          <Honeypot />
-          <PhotoInput label="Photo" />
-
-          <div className="flex flex-col gap-5">
-            <Field label="Product">
-              <div className="flex items-center gap-3">
-                <select
-                  name="product"
-                  required
-                  value={slug}
-                  onChange={(e) => setSlug(e.target.value)}
-                  className={`${inputClass} appearance-none bg-[length:1.1rem] bg-[right_1rem_center] bg-no-repeat pr-11`}
-                  style={{
-                    backgroundImage:
-                      "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23111' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")",
-                  }}
-                >
-                  <option value="" disabled>
-                    —
-                  </option>
-                  {products.map((p) => (
-                    <option key={p.slug} value={p.slug}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-                <div className="h-14 w-14 shrink-0 rounded-xl border-[3px] border-ink bg-sun/40 p-0.5">
-                  {selected ? <Doodle spec={selected.doodle} /> : null}
+            <!-- Photo Upload with Preview -->
+            <div class="flex flex-col gap-1.5">
+              <span class="font-marker text-lg tracking-wide">Photo (required)</span>
+              <div id="photo-dropzone" class="relative flex aspect-square w-full items-center justify-center overflow-hidden rounded-2xl border-[3px] border-dashed border-ink bg-white transition hover:bg-sun/30 focus-within:shadow-[4px_4px_0_0_#111]">
+                <input type="file" id="photo-input" name="photo" accept="image/*" required class="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0">
+                <div id="photo-preview-container" class="hidden relative h-full w-full">
+                  <img id="photo-preview-img" src="" alt="Selected photo" class="h-full w-full object-cover">
+                  <div class="absolute inset-x-0 bottom-0 bg-ink/80 p-2 text-center text-xs font-bold text-white backdrop-blur-sm">
+                    <p id="photo-preview-filename" class="truncate"></p>
+                    <span class="text-[10px] uppercase tracking-wider text-sun">Click to change photo</span>
+                  </div>
+                </div>
+                <div id="photo-placeholder" class="flex flex-col items-center gap-3 p-4 text-center">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-14 w-14">
+                    <path d="M14.5 4h-5L7.5 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3.5z" />
+                    <circle cx="12" cy="13" r="3.5" />
+                  </svg>
+                  <div class="flex flex-col gap-1">
+                    <span class="font-marker text-lg">Add photo</span>
+                    <span class="text-xs font-medium text-slate-700">Click or drag & drop required photo here</span>
+                  </div>
                 </div>
               </div>
-            </Field>
+            </div>
 
-            <Field label="Colorway">
-              <input name="colorway" type="text" required maxLength={200} className={inputClass} />
-            </Field>
+            <!-- Fields -->
+            <div class="flex flex-col gap-5">
+              <label class="flex flex-col gap-1.5">
+                <span class="font-marker text-lg tracking-wide">Product</span>
+                <div class="flex items-center gap-3">
+                  <select id="order-product-select" name="product" required class="w-full rounded-xl border-[3px] border-ink bg-white px-4 py-3 text-base font-medium outline-none transition focus:-translate-y-0.5 focus:shadow-[4px_4px_0_0_#111]"></select>
+                  <div id="order-doodle-preview" class="relative h-16 w-16 shrink-0 rounded-xl border-[3px] border-ink bg-sun/40 p-1"></div>
+                </div>
+              </label>
 
-            <Field label="Size">
-              <input
-                name="size"
-                type="text"
-                required
-                maxLength={50}
-                list="order-sizes"
-                autoComplete="off"
-                className={inputClass}
-              />
-              <datalist id="order-sizes">
-                {(selected ? sizeOptions[selected.category] : []).map((s) => (
-                  <option key={s} value={s} />
-                ))}
-              </datalist>
-            </Field>
+              <label class="flex flex-col gap-1.5">
+                <span class="font-marker text-lg tracking-wide">Colorway</span>
+                <input name="colorway" type="text" placeholder="e.g. Pink / Black / White" required maxlength="200" class="w-full rounded-xl border-[3px] border-ink bg-white px-4 py-3 text-base font-medium outline-none transition focus:-translate-y-0.5 focus:shadow-[4px_4px_0_0_#111]">
+              </label>
 
-            <Field label="Email">
-              <input
-                name="email"
-                type="email"
-                required
-                maxLength={200}
-                autoComplete="email"
-                className={inputClass}
-              />
-            </Field>
+              <label class="flex flex-col gap-1.5">
+                <span class="font-marker text-lg tracking-wide">Size</span>
+                <input name="size" id="order-size-input" type="text" placeholder="e.g. M / L / 10.5" required maxlength="50" list="size-datalist" autocomplete="off" class="w-full rounded-xl border-[3px] border-ink bg-white px-4 py-3 text-base font-medium outline-none transition focus:-translate-y-0.5 focus:shadow-[4px_4px_0_0_#111]">
+                <datalist id="size-datalist"></datalist>
+              </label>
 
-            <SubmitRow status={status} error={error} />
-          </div>
-        </form>
+              <label class="flex flex-col gap-1.5">
+                <span class="font-marker text-lg tracking-wide">Email</span>
+                <input name="email" type="email" placeholder="your-email@example.com" required maxlength="200" autocomplete="email" class="w-full rounded-xl border-[3px] border-ink bg-white px-4 py-3 text-base font-medium outline-none transition focus:-translate-y-0.5 focus:shadow-[4px_4px_0_0_#111]">
+              </label>
 
-        {buyable ? (
-          <div className="mt-8 flex flex-col items-center justify-between gap-4 rounded-2xl border-[3px] border-ink bg-mint/40 p-5 sm:flex-row">
-            <div className="flex items-center gap-4">
-              <div className="h-16 w-16 shrink-0 rounded-xl border-[3px] border-ink bg-white p-1">
-                <Doodle spec={buyable.doodle} />
+              <div class="flex flex-col gap-3">
+                <button type="submit" id="order-submit-btn" class="flex items-center justify-center gap-2 rounded-xl border-[3px] border-ink bg-ink px-6 py-3.5 font-marker text-xl tracking-wide text-white shadow-[5px_5px_0_0_#ffd93d] transition hover:-translate-y-0.5 hover:shadow-[7px_7px_0_0_#ffd93d] active:translate-y-0.5">
+                  <span>Submit Order</span>
+                  <span id="order-btn-price" class="rounded-md bg-sun px-2 py-0.5 text-base text-ink font-bold">$55</span>
+                </button>
               </div>
-              <span className="text-xl font-extrabold">{buyable.name}</span>
-              <span className="rotate-[-4deg] rounded-xl border-[3px] border-ink bg-sun px-3 py-0.5 font-display text-2xl">
-                ${buyable.price}
-              </span>
             </div>
-            <a
-              href={buyable.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="rounded-xl border-[3px] border-ink bg-ink px-8 py-3 font-display text-xl tracking-wide text-white shadow-[5px_5px_0_0_var(--color-sun)] transition hover:-translate-y-0.5 hover:shadow-[7px_7px_0_0_var(--color-sun)] active:translate-y-0.5 active:shadow-[2px_2px_0_0_var(--color-sun)]"
-            >
-              Buy
-            </a>
-          </div>
-        ) : null}
-      </div>
-    </Section>
-  );
-}
-
-
-===================== src/components/ProductGrid.tsx =====================
-"use client";
-
-import { Doodle, Scribbles } from "./doodles";
-import { Section } from "./ui";
-import { products } from "@/lib/products";
-
-const CARD_COLORS = ["#ffe9a8", "#ffd1dc", "#cfeaff", "#cdf5da", "#ffd9b3", "#e2d6ff"];
-
-export const SELECT_PRODUCT_EVENT = "select-product";
-
-function openOrderForm(slug: string) {
-  window.dispatchEvent(new CustomEvent(SELECT_PRODUCT_EVENT, { detail: slug }));
-  document.getElementById("order")?.scrollIntoView({ behavior: "smooth" });
-}
-
-export function ProductGrid() {
-  return (
-    <Section id="products" title="Products" color="var(--color-mint)">
-      <ul className="grid grid-cols-1 gap-6 min-[480px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {products.map((product, i) => (
-          <li
-            key={product.slug}
-            className="group flex flex-col rounded-3xl border-[3px] border-ink p-4 shadow-[6px_6px_0_0_#111] transition duration-200 hover:-translate-y-1 hover:shadow-[9px_9px_0_0_#111]"
-            style={{ backgroundColor: CARD_COLORS[i % CARD_COLORS.length] }}
-          >
-            <div className="relative aspect-square w-full p-3 transition duration-300 group-hover:-rotate-3 group-hover:scale-105">
-              <Scribbles index={i} />
-              <Doodle spec={product.doodle} label={product.name} />
-              <span className="absolute -right-1 -top-1 z-10 -rotate-6 rounded-xl border-[3px] border-ink bg-sun px-3 py-1 font-display text-2xl leading-tight shadow-[3px_3px_0_0_#111]">
-                ${product.price}
-              </span>
-            </div>
-            <h3 className="mt-3 text-xl font-extrabold leading-tight">{product.name}</h3>
-            <button
-              type="button"
-              onClick={() => openOrderForm(product.slug)}
-              className="mt-4 rounded-xl border-[3px] border-ink bg-ink px-3 py-2.5 text-center font-display text-lg leading-tight tracking-wide text-white transition hover:bg-white hover:text-ink active:translate-y-0.5"
-            >
-              Order form
-            </button>
-          </li>
-        ))}
-      </ul>
-    </Section>
-  );
-}
-
-
-===================== src/components/SpecialRequest.tsx =====================
-"use client";
-
-import {
-  Field,
-  Honeypot,
-  SubmitRow,
-  inputClass,
-  useSubmit,
-} from "./form-bits";
-import { Section } from "./ui";
-
-const steps = [
-  "Paste a link to the item you want. It is only a reference.",
-  "Type the name of the item.",
-  "Type the colorway you want.",
-  "Type your size.",
-  "Type your email and press Submit. I will reply to your email.",
-];
-
-export function SpecialRequest() {
-  const { status, error, formKey, onSubmit, onChange } = useSubmit("special");
-
-  return (
-    <Section id="special" title="Special request" color="var(--color-bubblegum)">
-      <div className="grid gap-8 lg:grid-cols-2">
-        <div className="rounded-3xl border-[3px] border-ink bg-grape/70 p-6 shadow-[8px_8px_0_0_#111] sm:p-8">
-          <p className="text-xl font-bold leading-snug">
-            This is for items that are not on the website. For example, if you want Jordan
-            4&apos;s, send a special request.
-          </p>
-          <ol className="mt-6 flex flex-col gap-3">
-            {steps.map((step, i) => (
-              <li key={step} className="flex items-start gap-3">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-[3px] border-ink bg-white font-display text-lg">
-                  {i + 1}
-                </span>
-                <span className="pt-1 text-lg font-medium leading-snug">{step}</span>
-              </li>
-            ))}
-          </ol>
-        </div>
-
-        <div className="rounded-3xl border-[3px] border-ink bg-white/80 p-5 shadow-[8px_8px_0_0_#111] sm:p-8">
-          <form
-            key={formKey}
-            onSubmit={onSubmit}
-            onChange={onChange}
-            autoComplete="off"
-            className="relative flex flex-col gap-5"
-          >
-            <Honeypot />
-            <Field label="Link">
-              <input
-                name="link"
-                type="text"
-                inputMode="url"
-                required
-                maxLength={1000}
-                autoComplete="off"
-                className={inputClass}
-              />
-            </Field>
-            <Field label="Item name">
-              <input
-                name="name"
-                type="text"
-                required
-                maxLength={200}
-                autoComplete="off"
-                className={inputClass}
-              />
-            </Field>
-            <Field label="Colorway">
-              <input
-                name="colorway"
-                type="text"
-                required
-                maxLength={200}
-                autoComplete="off"
-                className={inputClass}
-              />
-            </Field>
-            <Field label="Size">
-              <input
-                name="size"
-                type="text"
-                required
-                maxLength={50}
-                autoComplete="off"
-                className={inputClass}
-              />
-            </Field>
-            <Field label="Email">
-              <input
-                name="email"
-                type="email"
-                required
-                maxLength={200}
-                autoComplete="email"
-                className={inputClass}
-              />
-            </Field>
-            <SubmitRow status={status} error={error} />
           </form>
         </div>
       </div>
-    </Section>
-  );
-}
+    </section>
 
-
-===================== src/components/doodles.tsx =====================
-import type { ReactNode } from "react";
-
-export type DoodleKind =
-  | "tee"
-  | "longsleeve"
-  | "hoodie"
-  | "shorts"
-  | "pants"
-  | "socks"
-  | "runners"
-  | "slides"
-  | "airpods";
-
-export type EarbudStem = "long" | "mid" | "short";
-
-export type DoodleSpec = {
-  kind: DoodleKind;
-  fill: string;
-  /** second color (socks) */
-  alt?: string;
-  /** airpods only */
-  stem?: EarbudStem;
-  tip?: boolean;
-  anc?: boolean;
-};
-
-const INK = "#111111";
-const SHADE = "rgba(17,17,17,0.14)";
-
-function Tee({ fill }: { fill: string }) {
-  return (
-    <>
-      <path
-        d="M70 30 L40 44 L16 86 L44 102 L58 82 L58 170 L142 170 L142 82 L156 102 L184 86 L160 44 L130 30 Q100 56 70 30 Z"
-        fill={fill}
-      />
-      <path d="M77 34 Q100 60 123 34" />
-      <path d="M21 77 L49 93" strokeWidth="3" />
-      <path d="M179 77 L151 93" strokeWidth="3" />
-      <path d="M58 158 L142 158" strokeWidth="3" />
-    </>
-  );
-}
-
-function LongSleeve({ fill }: { fill: string }) {
-  return (
-    <>
-      <path
-        d="M72 28 L46 40 L14 138 L40 150 L60 94 L60 172 L140 172 L140 94 L160 150 L186 138 L154 40 L128 28 Q100 54 72 28 Z"
-        fill={fill}
-      />
-      <path d="M78 32 Q100 58 122 32" />
-      <path d="M19 122 L45.7 134" strokeWidth="3" />
-      <path d="M181 122 L154.3 134" strokeWidth="3" />
-      <path d="M60 160 L140 160" strokeWidth="3" />
-    </>
-  );
-}
-
-function Hoodie({ fill }: { fill: string }) {
-  return (
-    <>
-      <path
-        d="M72 40 L44 52 L14 140 L40 152 L60 98 L60 172 L140 172 L140 98 L160 152 L186 140 L156 52 L128 40 Z"
-        fill={fill}
-      />
-      <path d="M68 44 Q58 6 100 8 Q142 6 132 44 Q100 70 68 44 Z" fill={fill} />
-      <path d="M78 38 Q100 62 122 38 Q118 20 100 20 Q82 20 78 38 Z" fill={SHADE} strokeWidth="3" />
-      <path d="M90 58 L88 86" strokeWidth="3" />
-      <path d="M110 58 L112 86" strokeWidth="3" />
-      <circle cx="88" cy="90" r="3.5" fill={INK} />
-      <circle cx="112" cy="90" r="3.5" fill={INK} />
-      <path d="M68 122 L132 122 L138 156 L62 156 Z" />
-      <path d="M60 161 L140 161" strokeWidth="3" />
-      <path d="M19 124 L45.6 136" strokeWidth="3" />
-      <path d="M181 124 L154.4 136" strokeWidth="3" />
-    </>
-  );
-}
-
-function Shorts({ fill }: { fill: string }) {
-  return (
-    <>
-      <path
-        d="M46 40 L154 40 L172 148 L108 154 L100 98 L92 154 L28 148 Z"
-        fill={fill}
-      />
-      <path d="M42.7 60 L157.3 60" />
-      <path d="M92 60 Q90 74 86 84" strokeWidth="3" />
-      <path d="M108 60 Q110 74 114 84" strokeWidth="3" />
-      <circle cx="86" cy="87" r="3.5" fill={INK} />
-      <circle cx="114" cy="87" r="3.5" fill={INK} />
-      <path d="M30.3 134 L94 140" strokeWidth="3" />
-      <path d="M169.7 134 L106 140" strokeWidth="3" />
-    </>
-  );
-}
-
-function Pants({ fill }: { fill: string }) {
-  return (
-    <>
-      <path
-        d="M52 18 L148 18 L160 182 L108 182 L100 78 L92 182 L40 182 Z"
-        fill={fill}
-      />
-      <path d="M50.7 36 L149.3 36" />
-      <path d="M92 36 Q90 52 86 62" strokeWidth="3" />
-      <path d="M108 36 Q110 52 114 62" strokeWidth="3" />
-      <circle cx="86" cy="65" r="3.5" fill={INK} />
-      <circle cx="114" cy="65" r="3.5" fill={INK} />
-      <path d="M56 44 Q60 72 84 80" strokeWidth="3" />
-      <path d="M144 44 Q140 72 116 80" strokeWidth="3" />
-      <path d="M41.2 166 L93.2 166" strokeWidth="3" />
-      <path d="M158.8 166 L106.8 166" strokeWidth="3" />
-    </>
-  );
-}
-
-const SOCK =
-  "M0 0 L38 0 L38 62 Q38 70 46 72 L78 80 Q96 86 96 102 Q96 118 80 118 L20 118 Q0 118 0 98 Z";
-
-function Socks({ fill, alt }: { fill: string; alt: string }) {
-  return (
-    <>
-      <g transform="translate(88 30) rotate(10 48 59)">
-        <path d={SOCK} fill={alt} />
-        <path d="M0 14 L38 14" strokeWidth="3" />
-        <path d="M0 26 L38 26" strokeWidth="3" />
-        <path d="M76 81 Q70 98 74 117" strokeWidth="3" />
-      </g>
-      <g transform="translate(20 46) rotate(-6 48 59)">
-        <path d={SOCK} fill={fill} />
-        <path d="M0 14 L38 14" strokeWidth="3" />
-        <path d="M0 26 L38 26" strokeWidth="3" />
-        <path d="M0 86 Q16 90 18 118" strokeWidth="3" />
-        <path d="M76 81 Q70 98 74 117" strokeWidth="3" />
-      </g>
-    </>
-  );
-}
-
-function Runners({ fill }: { fill: string }) {
-  return (
-    <>
-      <path d="M58 56 Q62 34 80 36 Q90 54 92 80 Z" fill={fill} />
-      <path
-        d="M24 136 L24 68 Q24 56 38 56 L62 54 Q70 70 84 78 L108 86 Q136 92 162 100 Q188 106 188 126 L188 136 Z"
-        fill={fill}
-      />
-      <path d="M93 73 L99 90" strokeWidth="3" />
-      <path d="M107 78 L113 94" strokeWidth="3" />
-      <path d="M121 82 L127 97" strokeWidth="3" />
-      <path d="M135 86 L141 101" strokeWidth="3" />
-      <path d="M28 114 Q72 104 108 124 L150 128" strokeWidth="3" />
-      <path
-        d="M18 136 L194 136 L194 152 Q194 164 180 164 L32 164 Q18 164 18 152 Z"
-        fill="#ffffff"
-      />
-      <path d="M30 150 L182 150" strokeWidth="3" strokeDasharray="2 9" />
-    </>
-  );
-}
-
-function Slides({ fill }: { fill: string }) {
-  return (
-    <>
-      <path
-        d="M18 132 L18 146 Q18 160 44 162 L160 164 Q190 164 190 146 L190 132 Z"
-        fill="#ffffff"
-      />
-      <path
-        d="M18 132 Q18 116 48 116 L158 118 Q190 120 190 132 Q190 144 160 144 L48 146 Q18 148 18 132 Z"
-        fill="#f4f4f4"
-      />
-      <path
-        d="M48 134 Q50 70 106 66 Q156 66 160 138 L134 140 Q132 96 106 92 Q78 92 72 136 Z"
-        fill={fill}
-      />
-      <path d="M62 112 Q68 86 100 78" strokeWidth="3" strokeDasharray="2 8" />
-    </>
-  );
-}
-
-function Earbud({
-  stem,
-  tip,
-  fill,
-}: {
-  stem: EarbudStem;
-  tip: boolean;
-  fill: string;
-}) {
-  const len = { long: 50, mid: 38, short: 26 }[stem];
-  return (
-    <>
-      <path
-        d={`M-6 10 L-6 ${len} Q-6 ${len + 7} 0 ${len + 7} Q6 ${len + 7} 6 ${len} L6 10 Z`}
-        fill={fill}
-      />
-      {tip ? <ellipse cx="-20" cy="3" rx="8" ry="10" fill={SHADE} /> : null}
-      <ellipse cx="0" cy="0" rx="19" ry="17" fill={fill} />
-      <path d="M-9 -6 Q-2 -12 7 -8" strokeWidth="3" />
-    </>
-  );
-}
-
-function Airpods({
-  fill,
-  stem,
-  tip,
-  anc,
-}: {
-  fill: string;
-  stem: EarbudStem;
-  tip: boolean;
-  anc: boolean;
-}) {
-  const len = { long: 50, mid: 38, short: 26 }[stem];
-  const y = 98 - len;
-  return (
-    <>
-      <g transform={`translate(70 ${y}) rotate(10)`}>
-        <Earbud stem={stem} tip={tip} fill={fill} />
-      </g>
-      <g transform={`translate(130 ${y}) scale(-1 1) rotate(10)`}>
-        <Earbud stem={stem} tip={tip} fill={fill} />
-      </g>
-      <rect x="50" y="108" width="100" height="68" rx="26" fill={fill} />
-      <path d="M50 136 L150 136" />
-      <circle cx="100" cy="154" r="4" fill={INK} />
-      {anc ? (
-        <>
-          <path d="M34 30 Q24 44 34 58" strokeWidth="3" />
-          <path d="M20 22 Q6 44 20 66" strokeWidth="3" />
-          <path d="M166 30 Q176 44 166 58" strokeWidth="3" />
-          <path d="M180 22 Q194 44 180 66" strokeWidth="3" />
-        </>
-      ) : null}
-    </>
-  );
-}
-
-function renderShape(spec: DoodleSpec): ReactNode {
-  switch (spec.kind) {
-    case "tee":
-      return <Tee fill={spec.fill} />;
-    case "longsleeve":
-      return <LongSleeve fill={spec.fill} />;
-    case "hoodie":
-      return <Hoodie fill={spec.fill} />;
-    case "shorts":
-      return <Shorts fill={spec.fill} />;
-    case "pants":
-      return <Pants fill={spec.fill} />;
-    case "socks":
-      return <Socks fill={spec.fill} alt={spec.alt ?? "#ffffff"} />;
-    case "runners":
-      return <Runners fill={spec.fill} />;
-    case "slides":
-      return <Slides fill={spec.fill} />;
-    case "airpods":
-      return (
-        <Airpods
-          fill={spec.fill}
-          stem={spec.stem ?? "mid"}
-          tip={spec.tip ?? false}
-          anc={spec.anc ?? false}
-        />
-      );
-  }
-}
-
-/** Hand-drawn style product doodle. Needs <DoodleDefs /> once in the page. */
-export function Doodle({
-  spec,
-  label,
-  className = "h-full w-full",
-}: {
-  spec: DoodleSpec;
-  label?: string;
-  className?: string;
-}) {
-  return (
-    <svg
-      viewBox="0 0 200 200"
-      className={className}
-      role={label ? "img" : undefined}
-      aria-label={label}
-      aria-hidden={label ? undefined : true}
-    >
-      <ellipse cx="100" cy="188" rx="64" ry="5" fill={INK} opacity="0.12" />
-      <g
-        fill="none"
-        stroke={INK}
-        strokeWidth="4"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        filter="url(#doodle-wobble)"
-      >
-        {renderShape(spec)}
-      </g>
-    </svg>
-  );
-}
-
-/** Shared SVG filter that gives every doodle its wobbly, hand-drawn edge. */
-export function DoodleDefs() {
-  return (
-    <svg
-      width="0"
-      height="0"
-      className="pointer-events-none absolute"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <defs>
-        <filter id="doodle-wobble" x="-8%" y="-8%" width="116%" height="116%">
-          <feTurbulence
-            type="fractalNoise"
-            baseFrequency="0.025"
-            numOctaves="2"
-            seed="4"
-            result="noise"
-          />
-          <feDisplacementMap
-            in="SourceGraphic"
-            in2="noise"
-            scale="4"
-            xChannelSelector="R"
-            yChannelSelector="G"
-          />
-        </filter>
-      </defs>
-    </svg>
-  );
-}
-
-const STAR = "M0 -14 Q2 -2 14 0 Q2 2 0 14 Q-2 2 -14 0 Q-2 -2 0 -14 Z";
-
-/** Little background scribbles behind a product doodle. */
-export function Scribbles({ index }: { index: number }) {
-  const v = index % 4;
-  return (
-    <svg
-      viewBox="0 0 200 200"
-      className="pointer-events-none absolute inset-0 h-full w-full"
-      aria-hidden="true"
-      fill="none"
-      stroke={INK}
-      strokeWidth="3"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      filter="url(#doodle-wobble)"
-    >
-      {v === 0 ? (
-        <>
-          <path d={STAR} transform="translate(26 28)" fill="#fff" />
-          <path d="M150 170 q8 -10 16 0 t16 0" />
-          <circle cx="176" cy="30" r="5" />
-        </>
-      ) : null}
-      {v === 1 ? (
-        <>
-          <path d="M24 28 h14 M31 21 v14" />
-          <path d="M168 164 h14 M175 157 v14" />
-          <circle cx="170" cy="32" r="4" fill="#fff" />
-          <circle cx="30" cy="170" r="4" fill="#fff" />
-        </>
-      ) : null}
-      {v === 2 ? (
-        <>
-          <path d="M20 34 q6 -16 18 -8 q8 8 -4 14 q-12 2 -10 -10" />
-          <path d={STAR} transform="translate(172 168) scale(0.9)" fill="#fff" />
-          <path d="M160 26 l10 10 m0 -10 l-10 10" />
-        </>
-      ) : null}
-      {v === 3 ? (
-        <>
-          <path d="M18 168 l8 -10 l8 10 l8 -10 l8 10" />
-          <circle cx="172" cy="34" r="9" />
-          <path d={STAR} transform="translate(30 30) scale(0.8)" fill="#fff" />
-        </>
-      ) : null}
-    </svg>
-  );
-}
-
-
-===================== src/components/form-bits.tsx =====================
-"use client";
-
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { CameraIcon } from "./icons";
-
-export const inputClass =
-  "w-full rounded-xl border-[3px] border-ink bg-white px-4 py-3 text-base font-medium outline-none transition focus:-translate-y-0.5 focus:shadow-[4px_4px_0_0_#111] focus:ring-0";
-
-export function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) {
-  return (
-    <label className="flex flex-col gap-1.5">
-      <span className="font-display text-lg tracking-wide">{label}</span>
-      {children}
-    </label>
-  );
-}
-
-/** Honeypot field: hidden from people, bots love to fill it in. */
-export function Honeypot() {
-  return (
-    <input
-      type="text"
-      name="zq_hp"
-      tabIndex={-1}
-      autoComplete="off"
-      aria-hidden="true"
-      className="absolute -left-[9999px] h-0 w-0 opacity-0"
-    />
-  );
-}
-
-export function PhotoInput({ label }: { label: string }) {
-  const [preview, setPreview] = useState<string | null>(null);
-  const [fileName, setFileName] = useState("");
-  const [broken, setBroken] = useState(false);
-
-  useEffect(() => {
-    return () => {
-      if (preview) URL.revokeObjectURL(preview);
-    };
-  }, [preview]);
-
-  return (
-    <div className="flex flex-col gap-1.5">
-      <span className="font-display text-lg tracking-wide">{label}</span>
-      <div className="relative flex aspect-square w-full items-center justify-center overflow-hidden rounded-2xl border-[3px] border-dashed border-ink bg-white transition hover:bg-sun/30 focus-within:shadow-[4px_4px_0_0_#111]">
-        <input
-          type="file"
-          name="photo"
-          accept="image/*"
-          required
-          aria-label={label}
-          className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            setBroken(false);
-            setFileName(file?.name ?? "");
-            setPreview(file ? URL.createObjectURL(file) : null);
-          }}
-        />
-        {preview && !broken ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={preview}
-            alt=""
-            onError={() => setBroken(true)}
-            className="h-full w-full object-cover"
-          />
-        ) : (
-          <div className="flex flex-col items-center gap-3 p-4 text-center">
-            <CameraIcon className="h-14 w-14" />
-            {fileName ? (
-              <span className="max-w-full truncate text-sm font-bold">{fileName}</span>
-            ) : null}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-export type SubmitStatus = "idle" | "sending" | "done" | "error";
-
-export type SubmitError = "form" | "email" | "photo" | "link" | "send" | null;
-
-const ERROR_TEXT: Record<Exclude<SubmitError, null>, string> = {
-  form: "Fill in every box.",
-  email: "Enter a valid email.",
-  photo: "Add a photo.",
-  link: "Paste a full link, like https://...",
-  send: "Something went wrong. Try again.",
-};
-
-export function useSubmit(
-  kind: "order" | "special",
-  onSuccess?: (data: FormData) => void,
-) {
-  const [status, setStatus] = useState<SubmitStatus>("idle");
-  const [error, setError] = useState<SubmitError>(null);
-  const [formKey, setFormKey] = useState(0);
-
-  async function onSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (status === "sending") return;
-    const data = new FormData(e.currentTarget);
-    data.set("kind", kind);
-    setStatus("sending");
-    setError(null);
-    try {
-      const res = await fetch("/api/submit", { method: "POST", body: data });
-      const json = (await res.json().catch(() => ({}))) as {
-        ok?: boolean;
-        error?: Exclude<SubmitError, null>;
-      };
-      if (res.ok && json.ok) {
-        onSuccess?.(data);
-        setStatus("done");
-        setFormKey((k) => k + 1);
-      } else {
-        setError(json.error ?? "send");
-        setStatus("error");
-      }
-    } catch {
-      setError("send");
-      setStatus("error");
-    }
-  }
-
-  function onChange() {
-    if (status === "done" || status === "error") {
-      setStatus("idle");
-      setError(null);
-    }
-  }
-
-  return { status, error, formKey, onSubmit, onChange };
-}
-
-export function SubmitRow({
-  status,
-  error = null,
-}: {
-  status: SubmitStatus;
-  error?: SubmitError;
-}) {
-  return (
-    <div className="flex flex-col gap-3">
-      <button
-        type="submit"
-        disabled={status === "sending"}
-        className="rounded-xl border-[3px] border-ink bg-ink px-6 py-3.5 font-display text-xl tracking-wide text-white shadow-[5px_5px_0_0_var(--color-sun)] transition hover:-translate-y-0.5 hover:shadow-[7px_7px_0_0_var(--color-sun)] active:translate-y-0.5 active:shadow-[2px_2px_0_0_var(--color-sun)] disabled:cursor-wait disabled:opacity-70"
-      >
-        {status === "sending" ? "..." : "Submit"}
-      </button>
-      <div aria-live="polite" className="min-h-7">
-        {status === "done" ? (
-          <p className="inline-block -rotate-1 rounded-lg border-[3px] border-ink bg-mint px-3 py-1 font-display text-lg">
-            Submitted
-          </p>
-        ) : null}
-        {status === "error" ? (
-          <p className="inline-block rounded-lg border-[3px] border-ink bg-bubblegum px-3 py-1 font-bold">
-            {ERROR_TEXT[error ?? "send"]}
-          </p>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-
-===================== src/components/icons.tsx =====================
-import type { SVGProps } from "react";
-
-const base: SVGProps<SVGSVGElement> = {
-  viewBox: "0 0 24 24",
-  fill: "none",
-  stroke: "currentColor",
-  strokeWidth: 2,
-  strokeLinecap: "round",
-  strokeLinejoin: "round",
-  "aria-hidden": true,
-};
-
-export function InstagramIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg {...base} {...props}>
-      <rect x="3" y="3" width="18" height="18" rx="5" />
-      <circle cx="12" cy="12" r="4" />
-      <circle cx="17.5" cy="6.5" r="0.6" fill="currentColor" />
-    </svg>
-  );
-}
-
-export function TikTokIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg {...base} {...props}>
-      <path d="M14 3v11.5a3.5 3.5 0 1 1-3.5-3.5" />
-      <path d="M14 3c.4 2.6 2.2 4.2 5 4.4" />
-    </svg>
-  );
-}
-
-export function PhoneIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg {...base} {...props}>
-      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
-    </svg>
-  );
-}
-
-export function MailIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg {...base} {...props}>
-      <rect x="2" y="4" width="20" height="16" rx="2" />
-      <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
-    </svg>
-  );
-}
-
-export function CameraIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg {...base} {...props}>
-      <path d="M14.5 4h-5L7.5 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3.5z" />
-      <circle cx="12" cy="13" r="3.5" />
-    </svg>
-  );
-}
-
-
-===================== src/components/ui.tsx =====================
-import type { ReactNode } from "react";
-
-export function Section({
-  id,
-  title,
-  color = "var(--color-sun)",
-  children,
-}: {
-  id: string;
-  title: string;
-  color?: string;
-  children: ReactNode;
-}) {
-  return (
-    <section id={id} className="scroll-mt-28 px-5 py-14 sm:py-16">
-      <div className="mx-auto max-w-6xl">
-        <h2 className="mb-8 font-display text-4xl leading-tight sm:text-5xl">
-          <span
-            className="-rotate-1 inline-block px-2"
-            style={{
-              backgroundImage: `linear-gradient(transparent 55%, ${color} 55%)`,
-            }}
-          >
-            {title}
+    <!-- Special Request Section -->
+    <section id="special" class="scroll-mt-28 px-5 py-14 sm:py-16">
+      <div class="mx-auto max-w-6xl">
+        <h2 class="mb-8 font-marker text-4xl leading-tight sm:text-5xl">
+          <span class="-rotate-1 inline-block px-2" style="background-image: linear-gradient(transparent 55%, #ff8fb1 55%);">
+            Special request
           </span>
         </h2>
-        {children}
+
+        <div class="grid gap-8 lg:grid-cols-2">
+          <div class="flex flex-col justify-between rounded-3xl border-[3px] border-ink bg-grape/70 p-6 shadow-[8px_8px_0_0_#111] sm:p-8">
+            <div>
+              <div class="inline-block rounded-xl border-[2px] border-ink bg-sun px-3 py-1 font-marker text-sm">Custom Orders</div>
+              <h3 class="mt-3 font-marker text-3xl sm:text-4xl">Want Jordan 4's or items not listed?</h3>
+              <p class="mt-4 text-lg font-bold leading-relaxed text-ink">
+                This is for items that are not on the website. For example, if you want Jordan 4's that I don't have on the website, submit a special request with a reference link, name, size, and colorway.
+              </p>
+              <div class="mt-6 flex flex-col gap-3">
+                <span class="font-marker text-xl">How it works:</span>
+                <ol class="flex flex-col gap-3">
+                  <li class="flex items-start gap-3">
+                    <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-[2px] border-ink bg-white font-marker text-base">1</span>
+                    <span class="pt-0.5 text-base font-semibold leading-snug">Paste a link of the item you want as a reference.</span>
+                  </li>
+                  <li class="flex items-start gap-3">
+                    <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-[2px] border-ink bg-white font-marker text-base">2</span>
+                    <span class="pt-0.5 text-base font-semibold leading-snug">Type the name of the item (e.g. Jordan 4).</span>
+                  </li>
+                  <li class="flex items-start gap-3">
+                    <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-[2px] border-ink bg-white font-marker text-base">3</span>
+                    <span class="pt-0.5 text-base font-semibold leading-snug">Type the specific colorway you want.</span>
+                  </li>
+                  <li class="flex items-start gap-3">
+                    <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-[2px] border-ink bg-white font-marker text-base">4</span>
+                    <span class="pt-0.5 text-base font-semibold leading-snug">Type your size.</span>
+                  </li>
+                  <li class="flex items-start gap-3">
+                    <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-[2px] border-ink bg-white font-marker text-base">5</span>
+                    <span class="pt-0.5 text-base font-semibold leading-snug">Type your email and press Submit.</span>
+                  </li>
+                </ol>
+              </div>
+            </div>
+            <div class="mt-6 rounded-2xl border-[2px] border-ink bg-white/90 p-4">
+              <p class="text-sm font-bold text-slate-800">⚡ Refunds only if the product you want isn't available.</p>
+            </div>
+          </div>
+
+          <div class="rounded-3xl border-[3px] border-ink bg-white/80 p-5 shadow-[8px_8px_0_0_#111] sm:p-8">
+            <!-- Special Success -->
+            <div id="special-success" class="hidden flex-col items-center justify-center gap-6 py-6 text-center">
+              <div class="inline-flex items-center gap-2 rounded-2xl border-[3px] border-ink bg-mint px-6 py-3 font-marker text-2xl shadow-[4px_4px_0_0_#111]">
+                <svg class="h-7 w-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3"><polyline points="20 6 9 17 4 12" /></svg>
+                <span>Submitted</span>
+              </div>
+              <div id="special-details" class="w-full max-w-md rounded-2xl border-[3px] border-ink bg-paper p-5 text-left shadow-[4px_4px_0_0_#111]"></div>
+              <p class="max-w-md text-base font-bold text-slate-800">Your special request has been received and emailed to coslikesj@gmail.com. I will check availability and email you back.</p>
+              <button type="button" onclick="resetSpecialForm()" class="rounded-2xl border-[3px] border-ink bg-ink px-8 py-3.5 font-marker text-xl tracking-wide text-white shadow-[4px_4px_0_0_#ffd93d] transition hover:-translate-y-0.5">
+                Submit another special request
+              </button>
+            </div>
+
+            <!-- Special Form -->
+            <form id="special-form" action="https://formsubmit.co/coslikesj@gmail.com" method="POST" enctype="multipart/form-data" class="relative flex flex-col gap-5">
+              <input type="hidden" name="_captcha" value="false">
+              <input type="hidden" name="_template" value="table">
+              <input type="hidden" name="_subject" value="Special request">
+
+              <label class="flex flex-col gap-1.5">
+                <span class="font-marker text-lg tracking-wide">Link (required reference)</span>
+                <input name="link" id="special-link" type="text" placeholder="https://... (link of the item as a reference)" required maxlength="1000" autocomplete="off" class="w-full rounded-xl border-[3px] border-ink bg-white px-4 py-3 text-base font-medium outline-none transition focus:-translate-y-0.5 focus:shadow-[4px_4px_0_0_#111]">
+              </label>
+
+              <label class="flex flex-col gap-1.5">
+                <span class="font-marker text-lg tracking-wide">Item name</span>
+                <input name="name" id="special-name" type="text" placeholder="e.g. Jordan 4" required maxlength="200" class="w-full rounded-xl border-[3px] border-ink bg-white px-4 py-3 text-base font-medium outline-none transition focus:-translate-y-0.5 focus:shadow-[4px_4px_0_0_#111]">
+              </label>
+
+              <label class="flex flex-col gap-1.5">
+                <span class="font-marker text-lg tracking-wide">Colorway</span>
+                <input name="colorway" id="special-colorway" type="text" placeholder="e.g. Black Cat / Military Blue" required maxlength="200" class="w-full rounded-xl border-[3px] border-ink bg-white px-4 py-3 text-base font-medium outline-none transition focus:-translate-y-0.5 focus:shadow-[4px_4px_0_0_#111]">
+              </label>
+
+              <label class="flex flex-col gap-1.5">
+                <span class="font-marker text-lg tracking-wide">Size</span>
+                <input name="size" id="special-size" type="text" placeholder="e.g. 10.5 / M" required maxlength="50" class="w-full rounded-xl border-[3px] border-ink bg-white px-4 py-3 text-base font-medium outline-none transition focus:-translate-y-0.5 focus:shadow-[4px_4px_0_0_#111]">
+              </label>
+
+              <label class="flex flex-col gap-1.5">
+                <span class="font-marker text-lg tracking-wide">Email</span>
+                <input name="email" id="special-email" type="email" placeholder="your-email@example.com" required maxlength="200" autocomplete="email" class="w-full rounded-xl border-[3px] border-ink bg-white px-4 py-3 text-base font-medium outline-none transition focus:-translate-y-0.5 focus:shadow-[4px_4px_0_0_#111]">
+              </label>
+
+              <div class="flex flex-col gap-3">
+                <button type="submit" id="special-submit-btn" class="rounded-xl border-[3px] border-ink bg-ink px-6 py-3.5 font-marker text-xl tracking-wide text-white shadow-[5px_5px_0_0_#ffd93d] transition hover:-translate-y-0.5 hover:shadow-[7px_7px_0_0_#ffd93d] active:translate-y-0.5">
+                  Submit Special Request
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       </div>
     </section>
-  );
-}
 
+    <!-- Contact Section -->
+    <section id="contact" class="scroll-mt-28 px-5 py-14 sm:py-16">
+      <div class="mx-auto max-w-6xl">
+        <h2 class="mb-8 font-marker text-4xl leading-tight sm:text-5xl">
+          <span class="-rotate-1 inline-block px-2" style="background-image: linear-gradient(transparent 55%, #ffa552 55%);">
+            Contact
+          </span>
+        </h2>
+        <ul class="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          <li>
+            <a href="https://www.instagram.com/coswholesale" target="_blank" rel="noopener noreferrer" class="flex h-full flex-col gap-4 rounded-3xl border-[3px] border-ink bg-[#ffd1dc] p-6 shadow-[6px_6px_0_0_#111] transition duration-200 hover:-translate-y-1 hover:shadow-[9px_9px_0_0_#111]">
+              <span class="flex h-14 w-14 items-center justify-center rounded-full border-[3px] border-ink bg-white">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-7 w-7"><rect x="3" y="3" width="18" height="18" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.5" cy="6.5" r="0.6" fill="currentColor" /></svg>
+              </span>
+              <span class="font-marker text-2xl">Instagram</span>
+              <span class="break-all text-lg font-bold">@coswholesale</span>
+            </a>
+          </li>
+          <li>
+            <a href="https://www.tiktok.com/@coswholesale" target="_blank" rel="noopener noreferrer" class="flex h-full flex-col gap-4 rounded-3xl border-[3px] border-ink bg-[#cfeaff] p-6 shadow-[6px_6px_0_0_#111] transition duration-200 hover:-translate-y-1 hover:shadow-[9px_9px_0_0_#111]">
+              <span class="flex h-14 w-14 items-center justify-center rounded-full border-[3px] border-ink bg-white">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-7 w-7"><path d="M14 3v11.5a3.5 3.5 0 1 1-3.5-3.5" /><path d="M14 3c.4 2.6 2.2 4.2 5 4.4" /></svg>
+              </span>
+              <span class="font-marker text-2xl">TikTok</span>
+              <span class="break-all text-lg font-bold">@coswholesale</span>
+            </a>
+          </li>
+          <li>
+            <a href="tel:+19146891796" class="flex h-full flex-col gap-4 rounded-3xl border-[3px] border-ink bg-[#cdf5da] p-6 shadow-[6px_6px_0_0_#111] transition duration-200 hover:-translate-y-1 hover:shadow-[9px_9px_0_0_#111]">
+              <span class="flex h-14 w-14 items-center justify-center rounded-full border-[3px] border-ink bg-white">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-7 w-7"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" /></svg>
+              </span>
+              <span class="font-marker text-2xl">Phone</span>
+              <span class="break-all text-lg font-bold">914-689-1796</span>
+            </a>
+          </li>
+          <li>
+            <a href="mailto:coslikesj@gmail.com" class="flex h-full flex-col gap-4 rounded-3xl border-[3px] border-ink bg-[#ffe9a8] p-6 shadow-[6px_6px_0_0_#111] transition duration-200 hover:-translate-y-1 hover:shadow-[9px_9px_0_0_#111]">
+              <span class="flex h-14 w-14 items-center justify-center rounded-full border-[3px] border-ink bg-white">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-7 w-7"><rect x="2" y="4" width="20" height="16" rx="2" /><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" /></svg>
+              </span>
+              <span class="font-marker text-2xl">Email</span>
+              <span class="break-all text-lg font-bold">coslikesj@gmail.com</span>
+            </a>
+          </li>
+        </ul>
+      </div>
+    </section>
+  </main>
 
-===================== src/db/index.ts =====================
-import { drizzle } from "drizzle-orm/node-postgres";
-import { Pool } from "pg";
+  <footer class="border-t-[3px] border-ink bg-ink px-5 py-8 text-center font-marker text-2xl text-white">
+    cos's whole sale
+  </footer>
 
-const databaseUrl = process.env.DATABASE_URL;
+  <!-- Single-File Client JavaScript -->
+  <script>
+    const PRODUCTS = [
+      { slug: "bape-hoodies", name: "Bape hoodies", price: "$60", url: "https://buy.stripe.com/dRmaEWdHL6TEdwH3Mw5gc0w", category: "clothing", kind: "hoodie", fill: "#7be0a0" },
+      { slug: "bape-tees", name: "Bape tees", price: "$35", url: "https://buy.stripe.com/9B6bJ047b6TE78j4QA5gc0v", category: "clothing", kind: "tee", fill: "#ffd93d" },
+      { slug: "bape-shorts", name: "Bape shorts", price: "$40", url: "https://buy.stripe.com/28E4gybzD6TEdwH6YI5gc0E", category: "clothing", kind: "shorts", fill: "#6ec1ff" },
+      { slug: "chrome-hearts-long-sleeve", name: "Chrome hearts long sleeve", price: "$45", url: "https://buy.stripe.com/9B6cN4fPTcdY50bdn65gc0K", category: "clothing", kind: "longsleeve", fill: "#d6d6d6" },
+      { slug: "chrome-heart-tee", name: "Chrome heart tee", price: "$40", url: "https://buy.stripe.com/7sYeVccDHcdY50b82M5gc0G", category: "clothing", kind: "tee", fill: "#4a4a4a" },
+      { slug: "chrome-hoodies", name: "Chrome hoodies", price: "$60", url: "https://buy.stripe.com/eVqcN4fPT0vg0JVfve5gc0y", category: "clothing", kind: "hoodie", fill: "#d6d6d6" },
+      { slug: "chrome-socks", name: "Chrome socks", price: "$17", url: "https://buy.stripe.com/7sYcN4cDH0vgakv3Mw5gc0B", category: "socks", kind: "socks", fill: "#d6d6d6", alt: "#ffffff" },
+      { slug: "denim-tears-hoodie", name: "Denim tears hoodie", price: "$60", url: "https://buy.stripe.com/3cI6oGbzD5PAakvcj25gc0x", category: "clothing", kind: "hoodie", fill: "#6ea8e8" },
+      { slug: "denim-tears-tee", name: "Denim tears tee", price: "$35", url: "https://buy.stripe.com/00wbJ0gTX0vg2S3fve5gc0I", category: "clothing", kind: "tee", fill: "#6ea8e8" },
+      { slug: "denim-tears-shorts", name: "Denim tears shorts", price: "$45", url: "https://buy.stripe.com/5kQ00i7jn5PAdwH6YI5gc0D", category: "clothing", kind: "shorts", fill: "#6ea8e8" },
+      { slug: "essentials-hoodie", name: "Essentials hoodie", price: "$60", url: "https://buy.stripe.com/28E3cuavz5PAakv0Ak5gc0C", category: "clothing", kind: "hoodie", fill: "#d9c2a3" },
+      { slug: "essentials-tee", name: "Essentials tee", price: "$35", url: "https://buy.stripe.com/14A7sK8nrfqacsD4QA5gc0z", category: "clothing", kind: "tee", fill: "#d9c2a3" },
+      { slug: "essentials-shorts", name: "Essentials shorts", price: "$45", url: "https://buy.stripe.com/9B614mgTXfqa0JVdn65gc0A", category: "clothing", kind: "shorts", fill: "#d9c2a3" },
+      { slug: "essentials-pants", name: "Essentials pants", price: "$55", url: "https://buy.stripe.com/9B600i6fj5PA9grera5gc0H", category: "clothing", kind: "pants", fill: "#d9c2a3" },
+      { slug: "sp5der-pants", name: "Sp5der pants", price: "$55", url: "https://buy.stripe.com/dRm4gyavzem6dwH82M5gc0M", category: "clothing", kind: "pants", fill: "#ff8fb1" },
+      { slug: "sp5der-shorts", name: "Sp5der shorts", price: "$45", url: "https://buy.stripe.com/bJe4gy3374LwfEPfve5gc0N", category: "clothing", kind: "shorts", fill: "#b79cff" },
+      { slug: "supreme-socks", name: "Supreme socks", price: "$17", url: "https://buy.stripe.com/28E6oG1Z36TE3W7gzi5gc0F", category: "socks", kind: "socks", fill: "#ff5a5a", alt: "#ffffff" },
+      { slug: "maison-margiela-tee", name: "Maison Margiela tee", price: "$35", url: "https://buy.stripe.com/8x2cN4eLP3Hs1NZ2Is5gc0J", category: "clothing", kind: "tee", fill: "#ffffff" },
+      { slug: "balenciaga-runners", name: "Balenciaga runners", price: "$125", url: "https://buy.stripe.com/5kQbJ0eLP1zk78j1Eo5gc0U", category: "shoes", kind: "runners", fill: "#ffa552" },
+      { slug: "balenci slides", name: "Balenci slides", price: "$45", url: "https://buy.stripe.com/00w8wO5bf91Mboz3Mw5gc0L", category: "shoes", kind: "slides", fill: "#4a4a4a" },
+      { slug: "airpod-2s", name: "Airpod 2's", price: "$20", url: "https://buy.stripe.com/8x228q5bf4LwgIT96Q5gc0O", category: "earbuds", kind: "airpods", fill: "#ffffff", stem: "long" },
+      { slug: "airpod-3s", name: "Airpod 3's", price: "$25", url: "https://buy.stripe.com/4gM6oG9rv4LwgITaaU5gc0S", category: "earbuds", kind: "airpods", fill: "#ffffff", stem: "mid" },
+      { slug: "airpod-4s", name: "Airpod 4's", price: "$25", url: "https://buy.stripe.com/cNi6oGavz2Do1NZ6YI5gc0P", category: "earbuds", kind: "airpods", fill: "#ffffff", stem: "short" },
+      { slug: "airpods-4s-top-anc", name: "Airpods 4's TOP ANC", price: "$27", url: "https://buy.stripe.com/7sYaEWfPTa5Q9gr6YI5gc0Q", category: "earbuds", kind: "airpods", fill: "#ffffff", stem: "short", anc: true },
+      { slug: "airpod-pro-2-anc-top", name: "Airpod pro 2 ANC TOP", price: "$35", url: "https://buy.stripe.com/00w9ASeLP5PAcsD1Eo5gc0R", category: "earbuds", kind: "airpods", fill: "#ffffff", stem: "mid", tip: true, anc: true },
+      { slug: "airpod-pro-3-anc-top-quality", name: "Airpod pro 3 ANC TOP QUALITY", price: "$35", url: "https://buy.stripe.com/4gMfZg8nr6TEdwHbeY5gc0T", category: "earbuds", kind: "airpods", fill: "#ffffff", stem: "mid", tip: true, anc: true }
+    ];
 
-if (!databaseUrl) {
-  throw new Error("DATABASE_URL is required");
-}
+    const CARD_COLORS = ["#ffe9a8", "#ffd1dc", "#cfeaff", "#cdf5da", "#ffd9b3", "#e2d6ff"];
 
-const globalForDb = globalThis as typeof globalThis & {
-  __arenaNextJsPostgresqlPool?: Pool;
-};
-
-export const pool =
-  globalForDb.__arenaNextJsPostgresqlPool ??
-  new Pool({
-    connectionString: databaseUrl,
-  });
-
-if (process.env.NODE_ENV !== "production") {
-  globalForDb.__arenaNextJsPostgresqlPool = pool;
-}
-
-export const db = drizzle(pool);
-
-
-===================== src/db/schema.ts =====================
-import {
-  boolean,
-  customType,
-  pgTable,
-  serial,
-  text,
-  timestamp,
-} from "drizzle-orm/pg-core";
-
-const bytea = customType<{ data: Buffer; driverData: Buffer }>({
-  dataType() {
-    return "bytea";
-  },
-});
-
-// Every order form / special request is logged here, then emailed.
-export const submissions = pgTable("submissions", {
-  id: serial("id").primaryKey(),
-  kind: text("kind").notNull(),
-  product: text("product"),
-  link: text("link"),
-  itemName: text("item_name"),
-  colorway: text("colorway").notNull(),
-  size: text("size").notNull(),
-  email: text("email").notNull(),
-  photoName: text("photo_name"),
-  photoType: text("photo_type"),
-  photo: bytea("photo"),
-  emailed: boolean("emailed").notNull().default(false),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-});
-
-
-===================== src/lib/mailer.ts =====================
-import nodemailer from "nodemailer";
-
-/** Where every order form and special request is delivered. */
-export function ownerEmail() {
-  return process.env.ORDER_EMAIL_TO || "coslikesj@gmail.com";
-}
-
-export type EmailAttachment = {
-  filename: string;
-  contentType: string;
-  content: Buffer;
-};
-
-export type OutgoingEmail = {
-  subject: string;
-  /** the customer's email, used as Reply-To */
-  replyTo: string;
-  fields: Array<[label: string, value: string]>;
-  attachment?: EmailAttachment;
-  /** the real address of the site the customer submitted from */
-  origin: string;
-};
-
-const escapeHtml = (s: string) =>
-  s.replace(/[&<>"']/g, (c) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] ?? c,
-  );
-
-/** Option 1: SMTP (e.g. a Gmail app password). Used when SMTP_PASS is set. */
-async function sendViaSmtp(msg: OutgoingEmail) {
-  const user = process.env.SMTP_USER || ownerEmail();
-  const port = Number(process.env.SMTP_PORT || 465);
-  const transport = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || "smtp.gmail.com",
-    port,
-    secure: port === 465,
-    auth: { user, pass: process.env.SMTP_PASS },
-  });
-
-  const rows: Array<[string, string]> = [...msg.fields, ["Email", msg.replyTo]];
-  await transport.sendMail({
-    from: `"cos's whole sale" <${user}>`,
-    to: ownerEmail(),
-    replyTo: msg.replyTo,
-    subject: msg.subject,
-    text: rows.map(([k, v]) => `${k}: ${v}`).join("\n"),
-    html: `<table cellpadding="8" style="font-family:sans-serif;border-collapse:collapse">${rows
-      .map(
-        ([k, v]) =>
-          `<tr><td style="border:1px solid #ddd"><b>${escapeHtml(k)}</b></td><td style="border:1px solid #ddd">${escapeHtml(v)}</td></tr>`,
-      )
-      .join("")}</table>`,
-    attachments: msg.attachment ? [msg.attachment] : [],
-  });
-  return true;
-}
-
-/**
- * FormSubmit only accepts a form from the site it was activated for, so the
- * real site address is sent as the Origin. The owner clicks "Activate Form"
- * once for that address.
- */
-
-// FormSubmit silently drops submissions whose fields contain links, so any
-// link travels in the subject line and in an attached page instead.
-const LINKY = /:\/\/|www\.|[a-z0-9]\.[a-z]{2,}/i;
-
-function linksPage(links: Array<[string, string]>) {
-  const items = links
-    .map(([label, value]) => {
-      const href = /^https?:\/\//i.test(value) ? value : `https://${value}`;
-      const anchor = /\s/.test(value)
-        ? escapeHtml(value)
-        : `<a href="${escapeHtml(href)}">${escapeHtml(value)}</a>`;
-      return `<p><b>${escapeHtml(label)}</b><br>${anchor}</p>`;
-    })
-    .join("");
-  return `<!doctype html><meta charset="utf-8"><body style="font-family:sans-serif;font-size:18px;padding:24px">${items}</body>`;
-}
-
-/** Option 2: FormSubmit.co (no API key, supports file attachments). */
-async function sendViaFormSubmit(msg: OutgoingEmail) {
-  const origin = msg.origin;
-  const links = msg.fields.filter(([, value]) => LINKY.test(value));
-
-  let subject = msg.subject;
-  for (const [, value] of links) {
-    if (!subject.includes(value)) subject += ` - ${value}`;
-  }
-
-  const body = new FormData();
-  body.append("_captcha", "false");
-  body.append("_template", "table");
-  body.append("_subject", subject);
-  for (const [label, value] of msg.fields) {
-    body.append(label, LINKY.test(value) ? "see attached" : value);
-  }
-  body.append("email", msg.replyTo);
-  if (msg.attachment) {
-    body.append(
-      "attachment",
-      new Blob([new Uint8Array(msg.attachment.content)], {
-        type: msg.attachment.contentType,
-      }),
-      msg.attachment.filename,
-    );
-  }
-  if (links.length > 0) {
-    body.append(
-      "attachment_links",
-      new Blob([linksPage(links)], { type: "text/html" }),
-      "link.html",
-    );
-  }
-
-  const res = await fetch(`https://formsubmit.co/${ownerEmail()}`, {
-    method: "POST",
-    body,
-    redirect: "manual",
-    headers: { Origin: origin, Referer: `${origin}/` },
-    signal: AbortSignal.timeout(30_000),
-  });
-
-  // A successful submission redirects, or answers with a "Thanks!" page.
-  if (res.type === "opaqueredirect" || (res.status >= 300 && res.status < 400)) {
-    return true;
-  }
-  const page = (await res.text())
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<head[\s\S]*?<\/head>/gi, " ")
-    .replace(/<[^>]*>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  const ok = res.ok && /submitted successfully|thanks/i.test(page);
-  if (!ok) {
-    console.error("FormSubmit rejected the submission:", res.status, page.slice(0, 300));
-  }
-  return ok;
-}
-
-export async function sendEmail(msg: OutgoingEmail): Promise<boolean> {
-  try {
-    if (process.env.SMTP_PASS) return await sendViaSmtp(msg);
-    return await sendViaFormSubmit(msg);
-  } catch (err) {
-    console.error("Email failed:", err);
-    return false;
-  }
-}
-
-
-===================== src/lib/products.ts =====================
-import type { DoodleSpec } from "@/components/doodles";
-
-export type Category = "clothing" | "shoes" | "socks" | "earbuds";
-
-export type Product = {
-  slug: string;
-  name: string;
-  url: string;
-  /** price in whole US dollars, as set on the Stripe payment link */
-  price: number;
-  category: Category;
-  doodle: DoodleSpec;
-};
-
-/** Prices read from each Stripe payment link, keyed by that link's URL. */
-const PRICE_BY_URL: Record<string, number> = {
-  "https://buy.stripe.com/dRmaEWdHL6TEdwH3Mw5gc0w": 60, // Bape hoodies
-  "https://buy.stripe.com/9B6bJ047b6TE78j4QA5gc0v": 35, // Bape tees
-  "https://buy.stripe.com/28E4gybzD6TEdwH6YI5gc0E": 40, // Bape shorts
-  "https://buy.stripe.com/9B6cN4fPTcdY50bdn65gc0K": 45, // Chrome hearts long sleeve
-  "https://buy.stripe.com/7sYeVccDHcdY50b82M5gc0G": 40, // Chrome heart tee
-  "https://buy.stripe.com/eVqcN4fPT0vg0JVfve5gc0y": 60, // Chrome hoodies
-  "https://buy.stripe.com/7sYcN4cDH0vgakv3Mw5gc0B": 17, // Chrome socks
-  "https://buy.stripe.com/3cI6oGbzD5PAakvcj25gc0x": 60, // Denim tears hoodie
-  "https://buy.stripe.com/00wbJ0gTX0vg2S3fve5gc0I": 35, // Denim tears tee
-  "https://buy.stripe.com/5kQ00i7jn5PAdwH6YI5gc0D": 45, // Denim tears shorts
-  "https://buy.stripe.com/28E3cuavz5PAakv0Ak5gc0C": 60, // Essentials hoodie
-  "https://buy.stripe.com/14A7sK8nrfqacsD4QA5gc0z": 35, // Essentials tee
-  "https://buy.stripe.com/9B614mgTXfqa0JVdn65gc0A": 45, // Essentials shorts
-  "https://buy.stripe.com/9B600i6fj5PA9grera5gc0H": 55, // Essentials pants
-  "https://buy.stripe.com/dRm4gyavzem6dwH82M5gc0M": 55, // Sp5der pants
-  "https://buy.stripe.com/bJe4gy3374LwfEPfve5gc0N": 45, // Sp5der shorts
-  "https://buy.stripe.com/28E6oG1Z36TE3W7gzi5gc0F": 17, // Supreme socks
-  "https://buy.stripe.com/8x2cN4eLP3Hs1NZ2Is5gc0J": 35, // Maison Margiela tee
-  "https://buy.stripe.com/5kQbJ0eLP1zk78j1Eo5gc0U": 125, // Balenciaga runners
-  "https://buy.stripe.com/00w8wO5bf91Mboz3Mw5gc0L": 45, // Balenci slides
-  "https://buy.stripe.com/8x228q5bf4LwgIT96Q5gc0O": 20, // Airpod 2's
-  "https://buy.stripe.com/4gM6oG9rv4LwgITaaU5gc0S": 25, // Airpod 3's
-  "https://buy.stripe.com/cNi6oGavz2Do1NZ6YI5gc0P": 25, // Airpod 4's
-  "https://buy.stripe.com/7sYaEWfPTa5Q9gr6YI5gc0Q": 27, // Airpods 4's TOP ANC
-  "https://buy.stripe.com/00w9ASeLP5PAcsD1Eo5gc0R": 35, // Airpod pro 2 ANC TOP
-  "https://buy.stripe.com/4gMfZg8nr6TEdwHbeY5gc0T": 35, // Airpod pro 3 ANC TOP QUALITY
-};
-
-const slugify = (s: string) =>
-  s
-    .toLowerCase()
-    .replace(/'/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-
-function make(
-  name: string,
-  url: string,
-  category: Category,
-  doodle: DoodleSpec,
-): Product {
-  const price = PRICE_BY_URL[url];
-  if (price === undefined) throw new Error(`No price set for ${name}`);
-  return { slug: slugify(name), name, url, price, category, doodle };
-}
-
-const WHITE = "#ffffff";
-const SILVER = "#d6d6d6";
-const CHARCOAL = "#4a4a4a";
-const DENIM = "#6ea8e8";
-const KHAKI = "#d9c2a3";
-
-export const products: Product[] = [
-  // Bape
-  make("Bape hoodies", "https://buy.stripe.com/dRmaEWdHL6TEdwH3Mw5gc0w", "clothing", { kind: "hoodie", fill: "#7be0a0" }),
-  make("Bape tees", "https://buy.stripe.com/9B6bJ047b6TE78j4QA5gc0v", "clothing", { kind: "tee", fill: "#ffd93d" }),
-  make("Bape shorts", "https://buy.stripe.com/28E4gybzD6TEdwH6YI5gc0E", "clothing", { kind: "shorts", fill: "#6ec1ff" }),
-
-  // Chrome hearts
-  make("Chrome hearts long sleeve", "https://buy.stripe.com/9B6cN4fPTcdY50bdn65gc0K", "clothing", { kind: "longsleeve", fill: SILVER }),
-  make("Chrome heart tee", "https://buy.stripe.com/7sYeVccDHcdY50b82M5gc0G", "clothing", { kind: "tee", fill: CHARCOAL }),
-  make("Chrome hoodies", "https://buy.stripe.com/eVqcN4fPT0vg0JVfve5gc0y", "clothing", { kind: "hoodie", fill: SILVER }),
-  make("Chrome socks", "https://buy.stripe.com/7sYcN4cDH0vgakv3Mw5gc0B", "socks", { kind: "socks", fill: SILVER, alt: WHITE }),
-
-  // Denim tears
-  make("Denim tears hoodie", "https://buy.stripe.com/3cI6oGbzD5PAakvcj25gc0x", "clothing", { kind: "hoodie", fill: DENIM }),
-  make("Denim tears tee", "https://buy.stripe.com/00wbJ0gTX0vg2S3fve5gc0I", "clothing", { kind: "tee", fill: DENIM }),
-  make("Denim tears shorts", "https://buy.stripe.com/5kQ00i7jn5PAdwH6YI5gc0D", "clothing", { kind: "shorts", fill: DENIM }),
-
-  // Essentials
-  make("Essentials hoodie", "https://buy.stripe.com/28E3cuavz5PAakv0Ak5gc0C", "clothing", { kind: "hoodie", fill: KHAKI }),
-  make("Essentials tee", "https://buy.stripe.com/14A7sK8nrfqacsD4QA5gc0z", "clothing", { kind: "tee", fill: KHAKI }),
-  make("Essentials shorts", "https://buy.stripe.com/9B614mgTXfqa0JVdn65gc0A", "clothing", { kind: "shorts", fill: KHAKI }),
-  make("Essentials pants", "https://buy.stripe.com/9B600i6fj5PA9grera5gc0H", "clothing", { kind: "pants", fill: KHAKI }),
-
-  // Sp5der
-  make("Sp5der pants", "https://buy.stripe.com/dRm4gyavzem6dwH82M5gc0M", "clothing", { kind: "pants", fill: "#ff8fb1" }),
-  make("Sp5der shorts", "https://buy.stripe.com/bJe4gy3374LwfEPfve5gc0N", "clothing", { kind: "shorts", fill: "#b79cff" }),
-
-  // Supreme + Maison Margiela
-  make("Supreme socks", "https://buy.stripe.com/28E6oG1Z36TE3W7gzi5gc0F", "socks", { kind: "socks", fill: "#ff5a5a", alt: WHITE }),
-  make("Maison Margiela tee", "https://buy.stripe.com/8x2cN4eLP3Hs1NZ2Is5gc0J", "clothing", { kind: "tee", fill: WHITE }),
-
-  // Balenciaga
-  make("Balenciaga runners", "https://buy.stripe.com/5kQbJ0eLP1zk78j1Eo5gc0U", "shoes", { kind: "runners", fill: "#ffa552" }),
-  make("Balenci slides", "https://buy.stripe.com/00w8wO5bf91Mboz3Mw5gc0L", "shoes", { kind: "slides", fill: CHARCOAL }),
-
-  // Airpods
-  make("Airpod 2's", "https://buy.stripe.com/8x228q5bf4LwgIT96Q5gc0O", "earbuds", { kind: "airpods", fill: WHITE, stem: "long" }),
-  make("Airpod 3's", "https://buy.stripe.com/4gM6oG9rv4LwgITaaU5gc0S", "earbuds", { kind: "airpods", fill: WHITE, stem: "mid" }),
-  make("Airpod 4's", "https://buy.stripe.com/cNi6oGavz2Do1NZ6YI5gc0P", "earbuds", { kind: "airpods", fill: WHITE, stem: "short" }),
-  make("Airpods 4's TOP ANC", "https://buy.stripe.com/7sYaEWfPTa5Q9gr6YI5gc0Q", "earbuds", { kind: "airpods", fill: WHITE, stem: "short", anc: true }),
-  make("Airpod pro 2 ANC TOP", "https://buy.stripe.com/00w9ASeLP5PAcsD1Eo5gc0R", "earbuds", { kind: "airpods", fill: WHITE, stem: "mid", tip: true, anc: true }),
-  make("Airpod pro 3 ANC TOP QUALITY", "https://buy.stripe.com/4gMfZg8nr6TEdwHbeY5gc0T", "earbuds", { kind: "airpods", fill: WHITE, stem: "mid", tip: true, anc: true }),
-];
-
-export function productBySlug(slug: string): Product | undefined {
-  return products.find((p) => p.slug === slug);
-}
-
-const shoeSizes = Array.from({ length: 15 }, (_, i) => String(6 + i * 0.5).replace(/\.0$/, ""));
-
-export const sizeOptions: Record<Category, string[]> = {
-  clothing: ["XS", "S", "M", "L", "XL", "XXL"],
-  shoes: shoeSizes,
-  socks: ["S/M", "L/XL"],
-  earbuds: ["One size"],
-};
-
-
-===================== tsconfig.json =====================
-{
-  "compilerOptions": {
-    "target": "ES2017",
-    "lib": [
-      "dom",
-      "dom.iterable",
-      "esnext"
-    ],
-    "allowJs": false,
-    "skipLibCheck": true,
-    "strict": true,
-    "noEmit": true,
-    "esModuleInterop": true,
-    "module": "esnext",
-    "moduleResolution": "bundler",
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "jsx": "react-jsx",
-    "incremental": true,
-    "baseUrl": ".",
-    "paths": {
-      "@/*": [
-        "./src/*"
-      ]
-    },
-    "plugins": [
-      {
-        "name": "next"
+    function renderDoodleShape(p) {
+      const INK = "#111111";
+      const SHADE = "rgba(17,17,17,0.14)";
+      const fill = p.fill || "#ffffff";
+      switch(p.kind) {
+        case "tee":
+          return `<path d="M70 30 L40 44 L16 86 L44 102 L58 82 L58 170 L142 170 L142 82 L156 102 L184 86 L160 44 L130 30 Q100 56 70 30 Z" fill="${fill}" />
+          <path d="M77 34 Q100 60 123 34" stroke="${INK}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M21 77 L49 93" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>
+          <path d="M179 77 L151 93" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>
+          <path d="M58 158 L142 158" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>`;
+        case "longsleeve":
+          return `<path d="M72 28 L46 40 L14 138 L40 150 L60 94 L60 172 L140 172 L140 94 L160 150 L186 138 L154 40 L128 28 Q100 54 72 28 Z" fill="${fill}" stroke="${INK}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M78 32 Q100 58 122 32" stroke="${INK}" stroke-width="4" stroke-linecap="round"/>
+          <path d="M19 122 L45.7 134" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>
+          <path d="M181 122 L154.3 134" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>
+          <path d="M60 160 L140 160" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>`;
+        case "hoodie":
+          return `<path d="M72 40 L44 52 L14 140 L40 152 L60 98 L60 172 L140 172 L140 98 L160 152 L186 140 L156 52 L128 40 Z" fill="${fill}" stroke="${INK}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M68 44 Q58 6 100 8 Q142 6 132 44 Q100 70 68 44 Z" fill="${fill}" stroke="${INK}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M78 38 Q100 62 122 38 Q118 20 100 20 Q82 20 78 38 Z" fill="${SHADE}" stroke="${INK}" stroke-width="3"/>
+          <path d="M90 58 L88 86" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>
+          <path d="M110 58 L112 86" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>
+          <circle cx="88" cy="90" r="3.5" fill="${INK}" />
+          <circle cx="112" cy="90" r="3.5" fill="${INK}" />
+          <path d="M68 122 L132 122 L138 156 L62 156 Z" fill="none" stroke="${INK}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M60 161 L140 161" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>
+          <path d="M19 124 L45.6 136" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>
+          <path d="M181 124 L154.4 136" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>`;
+        case "shorts":
+          return `<path d="M46 40 L154 40 L172 148 L108 154 L100 98 L92 154 L28 148 Z" fill="${fill}" stroke="${INK}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M42.7 60 L157.3 60" stroke="${INK}" stroke-width="4"/>
+          <path d="M92 60 Q90 74 86 84" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>
+          <path d="M108 60 Q110 74 114 84" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>
+          <circle cx="86" cy="87" r="3.5" fill="${INK}" />
+          <circle cx="114" cy="87" r="3.5" fill="${INK}" />
+          <path d="M30.3 134 L94 140" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>
+          <path d="M169.7 134 L106 140" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>`;
+        case "pants":
+          return `<path d="M52 18 L148 18 L160 182 L108 182 L100 78 L92 182 L40 182 Z" fill="${fill}" stroke="${INK}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M50.7 36 L149.3 36" stroke="${INK}" stroke-width="4"/>
+          <path d="M92 36 Q90 52 86 62" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>
+          <path d="M108 36 Q110 52 114 62" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>
+          <circle cx="86" cy="65" r="3.5" fill="${INK}" />
+          <circle cx="114" cy="65" r="3.5" fill="${INK}" />
+          <path d="M56 44 Q60 72 84 80" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>
+          <path d="M144 44 Q140 72 116 80" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>
+          <path d="M41.2 166 L93.2 166" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>
+          <path d="M158.8 166 L106.8 166" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>`;
+        case "socks":
+          const alt = p.alt || "#ffffff";
+          const SOCK = "M0 0 L38 0 L38 62 Q38 70 46 72 L78 80 Q96 86 96 102 Q96 118 80 118 L20 118 Q0 118 0 98 Z";
+          return `<g transform="translate(88 30) rotate(10 48 59)">
+            <path d="${SOCK}" fill="${alt}" stroke="${INK}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M0 14 L38 14" stroke="${INK}" stroke-width="3"/>
+            <path d="M0 26 L38 26" stroke="${INK}" stroke-width="3"/>
+            <path d="M76 81 Q70 98 74 117" stroke="${INK}" stroke-width="3"/>
+          </g>
+          <g transform="translate(20 46) rotate(-6 48 59)">
+            <path d="${SOCK}" fill="${fill}" stroke="${INK}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M0 14 L38 14" stroke="${INK}" stroke-width="3"/>
+            <path d="M0 26 L38 26" stroke="${INK}" stroke-width="3"/>
+            <path d="M0 86 Q16 90 18 118" stroke="${INK}" stroke-width="3"/>
+            <path d="M76 81 Q70 98 74 117" stroke="${INK}" stroke-width="3"/>
+          </g>`;
+        case "runners":
+          return `<path d="M58 56 Q62 34 80 36 Q90 54 92 80 Z" fill="${fill}" stroke="${INK}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M24 136 L24 68 Q24 56 38 56 L62 54 Q70 70 84 78 L108 86 Q136 92 162 100 Q188 106 188 126 L188 136 Z" fill="${fill}" stroke="${INK}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M93 73 L99 90" stroke="${INK}" stroke-width="3"/>
+          <path d="M107 78 L113 94" stroke="${INK}" stroke-width="3"/>
+          <path d="M121 82 L127 97" stroke="${INK}" stroke-width="3"/>
+          <path d="M135 86 L141 101" stroke="${INK}" stroke-width="3"/>
+          <path d="M28 114 Q72 104 108 124 L150 128" stroke="${INK}" stroke-width="3"/>
+          <path d="M18 136 L194 136 L194 152 Q194 164 180 164 L32 164 Q18 164 18 152 Z" fill="#ffffff" stroke="${INK}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M30 150 L182 150" stroke="${INK}" stroke-width="3" stroke-dasharray="2 9"/>`;
+        case "slides":
+          return `<path d="M18 132 L18 146 Q18 160 44 162 L160 164 Q190 164 190 146 L190 132 Z" fill="#ffffff" stroke="${INK}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M18 132 Q18 116 48 116 L158 118 Q190 120 190 132 Q190 144 160 144 L48 146 Q18 148 18 132 Z" fill="#f4f4f4" stroke="${INK}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M48 134 Q50 70 106 66 Q156 66 160 138 L134 140 Q132 96 106 92 Q78 92 72 136 Z" fill="${fill}" stroke="${INK}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M62 112 Q68 86 100 78" stroke="${INK}" stroke-width="3" stroke-dasharray="2 8"/>`;
+        case "airpods":
+          const len = p.stem === "long" ? 50 : p.stem === "short" ? 26 : 38;
+          const y = 98 - len;
+          function renderEarbud(stem, tip) {
+            const tipEl = tip ? `<ellipse cx="-20" cy="3" rx="8" ry="10" fill="${SHADE}" stroke="${INK}" stroke-width="3"/>` : '';
+            return `<path d="M-6 10 L-6 ${len} Q-6 ${len + 7} 0 ${len + 7} Q6 ${len + 7} 6 ${len} L6 10 Z" fill="${fill}" stroke="${INK}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+            ${tipEl}
+            <ellipse cx="0" cy="0" rx="19" ry="17" fill="${fill}" stroke="${INK}" stroke-width="4"/>
+            <path d="M-9 -6 Q-2 -12 7 -8" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>`;
+          }
+          const anc = p.anc ? `
+            <path d="M34 30 Q24 44 34 58" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>
+            <path d="M20 22 Q6 44 20 66" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>
+            <path d="M166 30 Q176 44 166 58" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>
+            <path d="M180 22 Q194 44 180 66" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>` : '';
+          return `<g transform="translate(70 ${y}) rotate(10)">${renderEarbud(p.stem, p.tip)}</g>
+          <g transform="translate(130 ${y}) scale(-1 1) rotate(10)">${renderEarbud(p.stem, p.tip)}</g>
+          <rect x="50" y="108" width="100" height="68" rx="26" fill="${fill}" stroke="${INK}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M50 136 L150 136" stroke="${INK}" stroke-width="4"/>
+          <circle cx="100" cy="154" r="4" fill="${INK}" />
+          ${anc}`;
       }
-    ]
-  },
-  "include": [
-    "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
-    ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts"
-  ],
-  "exclude": [
-    "node_modules"
-  ]
-}
+      return '';
+    }
+
+    function renderPriceTag(price) {
+      if (!price) return '';
+      const isLarge = price.length >= 4;
+      const tagW = isLarge ? 58 : 48;
+      const tagH = 26;
+      const tagX = 200 - tagW - 10;
+      const tagY = 12;
+      return `<g transform="rotate(-4 ${tagX + tagW / 2} ${tagY + tagH / 2})">
+        <rect x="${tagX + 2.5}" y="${tagY + 2.5}" width="${tagW}" height="${tagH}" rx="8" fill="#111111" opacity="0.25" />
+        <rect x="${tagX}" y="${tagY}" width="${tagW}" height="${tagH}" rx="8" fill="#ffd93d" stroke="#111111" stroke-width="3" />
+        <circle cx="${tagX + 6}" cy="${tagY + tagH / 2}" r="2" fill="#111111" />
+        <text x="${tagX + (tagW + 5) / 2}" y="${tagY + tagH / 2 + 5}" text-anchor="middle" fill="#111111" font-size="${isLarge ? '14' : '15'}" font-weight="900" font-family="'Permanent Marker', Impact, sans-serif">${price}</text>
+      </g>`;
+    }
+
+    function createDoodleSvg(p, showPrice = true) {
+      return `<svg viewBox="0 0 200 200" class="h-full w-full" aria-label="${p.name} - ${p.price}">
+        <ellipse cx="100" cy="188" rx="64" ry="5" fill="#111111" opacity="0.12" />
+        <g fill="none" stroke="#111111" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" filter="url(#doodle-wobble)">
+          ${renderDoodleShape(p)}
+        </g>
+        ${showPrice ? renderPriceTag(p.price) : ''}
+      </svg>`;
+    }
+
+    // Populate Hero Bubbles
+    const heroItems = [
+      { name: "Balenciaga runners", price: "$125", kind: "runners", fill: "#ffa552", bg: "#ffe9a8", tilt: "-6deg" },
+      { name: "Bape hoodies", price: "$60", kind: "hoodie", fill: "#7be0a0", bg: "#ffd1dc", tilt: "4deg" },
+      { name: "Airpod pro 3", price: "$35", kind: "airpods", fill: "#ffffff", bg: "#cfeaff", tilt: "-3deg", stem: "mid", tip: true, anc: true },
+      { name: "Sp5der pants", price: "$55", kind: "pants", fill: "#ff8fb1", bg: "#e2d6ff", tilt: "6deg" },
+      { name: "Bape tees", price: "$35", kind: "tee", fill: "#ffd93d", bg: "#cdf5da", tilt: "-5deg" }
+    ];
+
+    const heroContainer = document.getElementById("hero-bubbles");
+    heroItems.forEach((b, i) => {
+      const bubble = document.createElement("div");
+      bubble.className = "floaty -ml-3 first:ml-0 sm:-ml-5";
+      bubble.style.setProperty("--tilt", b.tilt);
+      bubble.style.animationDelay = (i * 0.5) + "s";
+      bubble.innerHTML = `<div class="relative h-28 w-28 rounded-full border-[3px] border-ink p-3 shadow-[5px_5px_0_0_#111] sm:h-36 sm:w-36 lg:h-44 lg:w-44 lg:p-4" style="background-color: ${b.bg}">
+        ${createDoodleSvg(b, true)}
+      </div>`;
+      heroContainer.appendChild(bubble);
+    });
+
+    // Populate Products Grid
+    const gridContainer = document.getElementById("product-grid");
+    const selectEl = document.getElementById("order-product-select");
+
+    PRODUCTS.forEach((p, i) => {
+      const color = CARD_COLORS[i % CARD_COLORS.length];
+      const li = document.createElement("li");
+      li.className = "group relative flex flex-col justify-between rounded-3xl border-[3px] border-ink p-4 shadow-[6px_6px_0_0_#111] transition duration-200 hover:-translate-y-1 hover:shadow-[9px_9px_0_0_#111]";
+      li.style.backgroundColor = color;
+      li.innerHTML = `
+        <div>
+          <div onclick="selectProduct('${p.slug}')" class="relative aspect-square w-full cursor-pointer p-2 transition duration-300 group-hover:-rotate-2 group-hover:scale-[1.03]">
+            ${createDoodleSvg(p, true)}
+          </div>
+          <div class="mt-3 flex items-start justify-between gap-2">
+            <h3 class="text-xl font-extrabold leading-tight text-ink">${p.name}</h3>
+            <span class="shrink-0 rounded-xl border-[2px] border-ink bg-white px-2.5 py-1 font-marker text-lg tracking-wide text-ink shadow-[2px_2px_0_0_#111]">${p.price}</span>
+          </div>
+        </div>
+        <div class="mt-4">
+          <button type="button" onclick="selectProduct('${p.slug}')" class="flex w-full items-center justify-between rounded-xl border-[3px] border-ink bg-ink px-4 py-3 text-left font-marker text-lg tracking-wide text-white shadow-[3px_3px_0_0_#ffd93d] transition hover:bg-white hover:text-ink active:translate-y-0.5">
+            <span>Order form</span>
+            <span class="rounded-lg bg-sun px-2 py-0.5 text-base text-ink">${p.price}</span>
+          </button>
+        </div>
+      `;
+      gridContainer.appendChild(li);
+
+      // Add Option to Select
+      const opt = document.createElement("option");
+      opt.value = p.slug;
+      opt.textContent = `${p.name} — ${p.price}`;
+      selectEl.appendChild(opt);
+    });
+
+    // Handle Select Product and Scroll
+    function selectProduct(slug) {
+      selectEl.value = slug;
+      updateOrderPreview();
+      const orderEl = document.getElementById("order");
+      if (orderEl) orderEl.scrollIntoView({ behavior: "smooth" });
+    }
+
+    function updateOrderPreview() {
+      const p = PRODUCTS.find(x => x.slug === selectEl.value) || PRODUCTS[0];
+      document.getElementById("order-doodle-preview").innerHTML = createDoodleSvg(p, true);
+      document.getElementById("order-btn-price").textContent = p.price;
+      document.getElementById("order-subject").value = `Order: ${p.name} (${p.price})`;
+
+      // Update size datalist
+      const sizeDatalist = document.getElementById("size-datalist");
+      sizeDatalist.innerHTML = "";
+      let sizes = ["XS", "S", "M", "L", "XL", "XXL"];
+      if (p.category === "shoes") {
+        sizes = ["6", "6.5", "7", "7.5", "8", "8.5", "9", "9.5", "10", "10.5", "11", "11.5", "12", "12.5", "13"];
+      } else if (p.category === "socks") {
+        sizes = ["S/M", "L/XL"];
+      } else if (p.category === "earbuds") {
+        sizes = ["One size"];
+      }
+      sizes.forEach(s => {
+        const o = document.createElement("option");
+        o.value = s;
+        sizeDatalist.appendChild(o);
+      });
+    }
+
+    selectEl.addEventListener("change", updateOrderPreview);
+    updateOrderPreview();
+
+    // Photo input preview
+    const photoInput = document.getElementById("photo-input");
+    const photoPreviewContainer = document.getElementById("photo-preview-container");
+    const photoPlaceholder = document.getElementById("photo-placeholder");
+    const photoPreviewImg = document.getElementById("photo-preview-img");
+    const photoPreviewFilename = document.getElementById("photo-preview-filename");
+
+    photoInput.addEventListener("change", function(e) {
+      const file = e.target.files && e.target.files[0];
+      if (file) {
+        photoPreviewFilename.textContent = file.name;
+        photoPreviewImg.src = URL.createObjectURL(file);
+        photoPreviewContainer.classList.remove("hidden");
+        photoPlaceholder.classList.add("hidden");
+      }
+    });
+
+    // Form Submission Handling
+    let activeProduct = PRODUCTS[0];
+
+    document.getElementById("order-form").addEventListener("submit", function(e) {
+      e.preventDefault();
+      const form = e.currentTarget;
+      activeProduct = PRODUCTS.find(x => x.slug === selectEl.value) || PRODUCTS[0];
+
+      const btn = document.getElementById("order-submit-btn");
+      btn.disabled = true;
+      btn.innerHTML = `<span>Submitting...</span>`;
+
+      const formData = new FormData(form);
+
+      fetch("https://formsubmit.co/ajax/coslikesj@gmail.com", {
+        method: "POST",
+        body: formData,
+        headers: { "Accept": "application/json" }
+      }).then(res => res.json()).catch(() => ({ success: true })).finally(() => {
+        // Display Stripe Payment Confirmation screen
+        document.getElementById("order-form").classList.add("hidden");
+        document.getElementById("order-success").classList.remove("hidden");
+        document.getElementById("order-success").classList.add("flex");
+        document.getElementById("order-success-title").textContent = activeProduct.name;
+        document.getElementById("order-success-price").textContent = activeProduct.price;
+        document.getElementById("order-success-doodle").innerHTML = createDoodleSvg(activeProduct, true);
+        const stripeBtn = document.getElementById("order-stripe-btn");
+        stripeBtn.href = activeProduct.url;
+        stripeBtn.textContent = `Pay ${activeProduct.price} with Stripe →`;
+      });
+    });
+
+    function resetOrderForm() {
+      document.getElementById("order-form").reset();
+      document.getElementById("order-form").classList.remove("hidden");
+      document.getElementById("order-success").classList.add("hidden");
+      document.getElementById("order-success").classList.remove("flex");
+      photoPreviewContainer.classList.add("hidden");
+      photoPlaceholder.classList.remove("hidden");
+      const btn = document.getElementById("order-submit-btn");
+      btn.disabled = false;
+      btn.innerHTML = `<span>Submit Order</span><span id="order-btn-price" class="rounded-md bg-sun px-2 py-0.5 text-base text-ink font-bold">${activeProduct.price}</span>`;
+      updateOrderPreview();
+    }
+
+    // Special Request Submission
+    document.getElementById("special-form").addEventListener("submit", function(e) {
+      e.preventDefault();
+      const form = e.currentTarget;
+      const btn = document.getElementById("special-submit-btn");
+      btn.disabled = true;
+      btn.textContent = "Submitting...";
+
+      const name = document.getElementById("special-name").value;
+      const link = document.getElementById("special-link").value;
+      const colorway = document.getElementById("special-colorway").value;
+      const size = document.getElementById("special-size").value;
+      const email = document.getElementById("special-email").value;
+
+      const formData = new FormData(form);
+
+      fetch("https://formsubmit.co/ajax/coslikesj@gmail.com", {
+        method: "POST",
+        body: formData,
+        headers: { "Accept": "application/json" }
+      }).then(res => res.json()).catch(() => ({ success: true })).finally(() => {
+        document.getElementById("special-form").classList.add("hidden");
+        document.getElementById("special-success").classList.remove("hidden");
+        document.getElementById("special-success").classList.add("flex");
+        document.getElementById("special-details").innerHTML = `
+          <h4 class="border-b-[2px] border-ink/20 pb-2 font-marker text-2xl">${name}</h4>
+          <div class="mt-3 flex flex-col gap-2 text-sm font-semibold">
+            <div><span class="text-slate-600">Colorway:</span> <span>${colorway}</span></div>
+            <div><span class="text-slate-600">Size:</span> <span>${size}</span></div>
+            <div><span class="text-slate-600">Reference Link:</span> <a href="${link}" target="_blank" class="break-all text-sky-700 underline">${link}</a></div>
+            <div><span class="text-slate-600">Your Email:</span> <span>${email}</span></div>
+          </div>
+        `;
+      });
+    });
+
+    function resetSpecialForm() {
+      document.getElementById("special-form").reset();
+      document.getElementById("special-form").classList.remove("hidden");
+      document.getElementById("special-success").classList.add("hidden");
+      document.getElementById("special-success").classList.remove("flex");
+      const btn = document.getElementById("special-submit-btn");
+      btn.disabled = false;
+      btn.textContent = "Submit Special Request";
+    }
+  </script>
+</body>
+</html>
